@@ -1,0 +1,40 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+
+# production
+/dist
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files (keep .env.example)
+.env
+.env*.local
+.env.development
+.env.production
+
+# editor
+.vscode/
+.idea/
+
+# supabase local
+/supabase/.branches
+/supabase/.temp
+
+# coverage
+/coverage
