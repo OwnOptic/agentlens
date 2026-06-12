@@ -1,40 +1,46 @@
-# Project Plan: AgentLens — Copilot Agent Governance & Observability Webapp
-Date: 2026-06-12 | Owner: Elliot Margot | Status: Draft
-Objective: Ship a single-tenant, install-light webapp that does everything the Copilot Studio Kit's monitoring/governance side does — plus proactive alerting and AI query the Kit can't — deployed by a web app + one Entra app registration instead of a 45 MB Dataverse managed solution.
+# Project Plan: AgentLens v2 — Copilot Agent Governance & Observability Platform
+Date: 2026-06-12 | Owner: Elliot Margot | Status: Draft (v2 — supersedes v1, archived at docs/PLAN-v1-archive.md)
+Objective: Ship a single-tenant, install-light web platform that combines tenant-wide agent inventory, cost/capacity analytics, a compliance + maturity engine, proactive alerting, and policy-as-code release gates — on an Azure Resource Graph backbone — validated first in Elliot's MVP tenant and published open-source.
 
-> Working title: **AgentLens** (naming is an open question). "All-in-one" = one web app covering inventory, cost, sprawl, governance, KPIs, health, lifecycle, and AI — no Dataverse footprint in client environments beyond a read-only application user.
+> **What changed v1 → v2.** (a) Inventory backbone swapped to **Azure Resource Graph** (`PowerPlatformResources`) — Microsoft now exposes the whole-tenant agent inventory in one query, killing the per-env Dataverse fan-out *and* the per-env app-user provisioning. (b) Cost via **PPAC Licensing API + CSV fallback** (proven path). (c) Scope expanded with four new governance pillars harvested from prior art: **credit/capacity analytics**, **compliance engine + risky-pattern detection**, **maturity assessment**, and **policy-as-code release gates**. (d) **MVP-tenant linkage** is now first-class. Prior art studied: `sbrakni/Copilot-Studio-Governance-Monitoring-Power-App` (monitoring), `judeper/FSI-AgentGov` (maturity/regulatory), `oneKn8/agentgov` (trust/release gates).
 
 ---
 
 ## Executive Summary
-AgentLens is a Next.js webapp that reads the Power Platform / BAP / Dataverse / Licensing / App Insights APIs through a single Entra service principal and renders a live agent-governance command surface for one tenant. It targets the two problems ITER actually has — **default-environment sprawl** (~460 apps to migrate) and **runaway agent cost** (the ~$300/week burner) — with a stateful ingestion pipeline, a baseline-diff alert engine that pushes to Teams/email, and an AI query layer. It installs in ~4 steps (~20 min) versus the multi-hour Kit saga, takes nothing into client environments except a read-only app-user, and ships open-source as Elliot's MVP OSS-creator deliverable. v1 (Phases 0–2) delivers the ITER-pain core and is independently shippable; Phases 3–6 iterate toward an Aug 31 OSS publish + community-talk demo.
+AgentLens v2 is a Next.js web app that reads the entire tenant's Copilot Studio estate through **one Entra service principal** — using **Azure Resource Graph** for inventory (owner, env, sharing, model, channels, connectors), the **PPAC Licensing API** (with CSV fallback) for per-agent credit cost, and **Dataverse** only for on-demand deep scans. On that backbone it layers the things native PPAC + Agent 365 and the in-platform competitors don't combine in one standalone tool: **proactive Teams/email alerting**, a stateful **default-env migration tracker**, a **configurable compliance engine** with scoring, **risky-pattern detection**, an honest **maturity assessment**, and **policy-as-code release gates** with signed audit records. It installs in minutes (web app + 1 app reg + ARG read — no Dataverse import into client envs), is validated end-to-end in Elliot's **MVP tenant** first, and ships open-source as the flagship MVP contribution. v1 (Phases -1→2) is the independently shippable core; Phases 3→8 are the governance-platform roadmap.
 
 ## Scope
-**In scope**
-- Single tenant (multi-environment within that tenant).
-- Agent inventory, default-env sprawl + migration tracker, cost/message-volume monitoring + budget/anomaly alerting (Teams/email), DLP/sharing/orphan governance posture, conversation KPI aggregates, App Insights health, lifecycle/prod-entry checklist, maker self-service, AI NL-query + summaries.
-- Install = deploy web app + 1 Entra app registration + per-env Dataverse application-user via a provisioning script.
-- Open-source reference deploy on Vercel + Supabase; documented Azure path for client/residency.
+**In scope (full vision)**
+- Inventory + default-env sprawl + migration tracker (ARG-backed)
+- Cost: per-agent/per-env credit + feature breakdown + capacity/overage + PAYG estimate + CSV fallback
+- Proactive alerting (budget, spike, overage, new default-env agent, compliance, unauthorized publish) → Teams/email
+- Compliance engine (configurable rules, scoring, violation lifecycle, optional auto-remediation) + risky-pattern detection
+- Maturity assessment (controls library, 0-4 scoring, regulatory mapping, honest partial-capped auto-scoring, report + questionnaire)
+- Trust & release gates + policy-as-code (YAML policies, unit tests, signed/revocable decision records, optional MCP server)
+- Conversation KPI aggregates, App Insights health, lifecycle stages, maker self-service, AI NL-query + summaries
+- Reporting: exec overview, tabbed agent detail, weekly governance report (PDF/Teams), deep-scan on demand
+- Install-light single-tenant; MVP-tenant-first, then client tenants by granting the app's permissions there
 
-**Out of scope (v1, and deliberate non-goals)**
-- The Kit's **Dataverse-native test-automation framework** (define/run test cases stored in Dataverse) — high effort, low overlap with the governance goal. Defer/decline.
-- **PowerShield-style interactive DLP-approval workflows** (stateful maker request/approve) — the Kit's Dataverse backend earns its keep here; we monitor DLP, we don't replace the approval engine.
-- Multi-tenant "command center" (explicitly dropped per user — single tenant only).
-- Writing to client environments (read-only posture; the app-user gets a read role only).
+**Out of scope**
+- Multi-tenant command center (one instance per tenant — D-011)
+- Rebuilding the CS Kit's Dataverse-native test-automation framework
+- Writing to client environments (read-only posture; release-gate "enforcement" is advisory/notify, not forced delete unless explicitly enabled)
+- M365 declarative agents + Agent 365 agents as first-class objects in v1 (ARG `microsoft.copilotstudio/agents` only; note them as future)
+- Invoice-grade per-agent cost (estimated from credit/volume — labelled)
 
 **Assumptions**
-- Per-agent **invoice-grade** cost is not cleanly exposed by any single public API; v1 derives **estimated** cost from message/session volume + env-level credit burn (honest fidelity ceiling — see R-001).
-- Conversation transcripts are **aggregate-only** (counts/trends), never stored as content (PII — see R-002).
-- Elliot has tenant-admin in the MVP tenant and can grant admin consent + add app-users; client deploys (ITER) require the client to add the app-user per env.
-- Part-time build capacity (~6–8 h/week) against heavy client load; Aug 31 = MVP-goal anchor, not a hard external deadline.
+- ARG `PowerPlatformResources` is reachable with a PP-admin / Dynamics-365-admin app reg (S-1 proves it)
+- PPAC Licensing API yields per-agent or per-env credit; CSV export is the fallback (S-1 proves which)
+- MVP tenant has (or will be seeded with) ≥2 Copilot Studio agents for real data
+- Transcripts aggregate-only (PII); estimated cost labelled; maturity scoring partial-capped
 
 ## Stakeholders
 | Name | Role | Responsibility (RACI) | Availability |
 |------|------|----------------------|--------------|
-| Elliot Margot | Builder / Owner | Responsible + Accountable | ~6–8 h/week (part-time) |
-| ITER (Junmin / Bertrand) | First client pilot | Consulted (validate against real estate) | Async; via existing engagement |
-| MVP community | OSS audience | Informed (publish + talk) | n/a |
-| Microsoft (PP product) | API provider | Informed (product feedback path) | n/a |
+| Elliot Margot | Builder / Owner | Responsible + Accountable | ~6–8 h/week part-time |
+| MVP tenant | Dev/demo/OSS test bed | — | Elliot-admin |
+| ITER (later) | First client pilot | Consulted | via engagement |
+| MVP community | OSS audience + talk | Informed | n/a |
 
 ---
 
@@ -43,418 +49,350 @@ AgentLens is a Next.js webapp that reads the Power Platform / BAP / Dataverse / 
 ### Phases
 | # | Phase | Tasks | Effort | Calendar | Milestone |
 |---|-------|-------|--------|----------|-----------|
-| 0 | Foundations | 5 | 16h | Wk 1 | Auth + 1-env smoke test green |
-| 1 | Inventory + Sprawl | 6 | 24h | Wk 2–3 | **Shippable: live inventory + migration tracker** |
-| 2 | Cost + Alerting | 5 | 24h | Wk 4–5 | **Shippable: $/volume watchdog + Teams alerts** |
-| 3 | Governance posture | 3 | 16h | Wk 6 | DLP + sharing + orphan detection |
-| 4 | KPIs + Health | 2 | 16h | Wk 7 | Conversation aggregates + App Insights health |
-| 5 | AI + Lifecycle + Maker | 4 | 20h | Wk 8–9 | NL query + checklist + maker view |
-| 6 | OSS hardening + publish | 4 | 16h | Wk 10 | **Public GitHub release + demo deck** |
+| -1 | Validation Spike (MVP tenant) | 5 | 10h | Wk 1 | **Data contract proven in MVP tenant** |
+| 0 | Foundations (ARG backbone) | 5 | 16h | Wk 1–2 | Auth + ARG ingest + schema |
+| 1 | Inventory + Sprawl | 5 | 18h | Wk 2–3 | **Shippable: live inventory + migration tracker** |
+| 2 | Cost + Capacity + Alerting | 6 | 26h | Wk 4–5 | **Shippable: cost/capacity watchdog + Teams alerts** |
+| 3 | Compliance Engine + Risky Patterns | 5 | 24h | Wk 6–7 | Compliance scoring + violation lifecycle |
+| 4 | KPIs + Health + Reporting/Exec | 5 | 24h | Wk 8–9 | Weekly report + exec dashboard |
+| 5 | Maturity Assessment Engine | 4 | 22h | Wk 10–11 | Maturity score + assessment report |
+| 6 | Release Gates + Policy-as-Code | 5 | 26h | Wk 12–13 | Policy gate + signed decision records |
+| 7 | AI Layer + Maker Self-Service | 4 | 20h | Wk 14 | NL query + maker view |
+| 8 | OSS Hardening + Publish + Demo | 4 | 16h | Wk 15 | **Public release + talk** |
 
 ### Stats
-- Total tasks: 29 | Total steps: ~110
-- Total effort: 132h (**with 20% buffer: ~158h**)
-- Critical path (Phase 0 → 1 → 2 core): **~52h** to shippable v1
-- Parallel tracks: connectors (Phase 1/2) parallelize per-API; UI parallelizes with ingestion once schema is fixed
-- External dependencies: 3 (Entra admin consent, per-env app-user provisioning, Teams webhook/email channel)
+- Total tasks: 48 | Total steps: ~180
+- Total effort: 202h (**with 20% buffer: ~242h**)
+- **v1 core (Phases -1→2): 70h → ~84h buffered** = the Aug-31-achievable shippable platform
+- Critical path to shippable v1: **~46h**
+- Parallel tracks: connectors parallelize per-API; compliance/maturity/gates are independent epics post-v1
+- External dependencies: 3 (admin consent in MVP tenant, PP-admin role, Teams/email channel)
 
 ---
 
 ## Detailed Plan
 
-### Phase 0 — Foundations
+### Phase -1 — Validation Spike (MVP tenant) — proves the data contract, BLOCKS build
 
-#### T-001: Scaffold repo, Next.js app, Supabase project
-**Phase**: 0 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P0 · **Depends on**: none · **Blocked by**: none
-**Description**: Stand up the OSS repo and the Next.js + Tailwind + Zustand shell with a Supabase project, matching the JumpStart stack so patterns/components are reusable.
+#### T-001: Create AgentLens app registration in the MVP tenant
+**Phase**: -1 · **Owner**: Elliot · **Effort**: 2h · **Priority**: P0 · **Depends on**: none · **Blocked by**: MVP-tenant admin consent (self)
+**Description**: The single service principal AgentLens uses for everything, created in Elliot's MVP tenant — the dev/demo/OSS bed.
 **Steps**:
-- [ ] Create GitHub repo `agentlens` (MIT, README stub, /docs) (20m)
-- [ ] `create-next-app` (TS, App Router, Tailwind), add Zustand + Recharts + Supabase client (40m)
-- [ ] Create Supabase project (MVP-tenant-adjacent), wire env vars, `.env.example` (30m)
-- [ ] CI: lint + typecheck GitHub Action (30m)
-- [ ] Base layout shell (sidebar nav, dark theme, brand tokens) (1h)
-**Deliverable**: Running Next.js app on localhost + empty Supabase, pushed to GitHub.
-**Acceptance criteria**:
-- [ ] `npm run dev` renders the shell; Supabase client connects
-- [ ] CI green on push
-**Risks**: Stack drift from JumpStart — mitigate by copying its tsconfig/tailwind/eslint config.
-**Notes**: Reuse JumpStart UI primitives where license-compatible.
+- [ ] Register `AgentLens-Reader` in the MVP tenant; client secret (dev) (20m)
+- [ ] Add app perms: **Azure Resource Graph / ARM read** (`https://management.azure.com/user_impersonation` or app role for ARG), **Power Platform API** (`https://api.powerplatform.com/.default`), **Graph** `User.Read.All`, PPAC Licensing (`https://api.powerplatform.com`) (40m)
+- [ ] Assign the SP a **Power Platform administrator** (or Dynamics 365 admin) directory role — required for ARG `PowerPlatformResources` + the licensing API (30m)
+- [ ] Admin-consent; record tenant/client IDs (30m)
+**Deliverable**: Consented app reg in the MVP tenant + permission matrix in /docs.
+**Acceptance criteria**: [ ] Client-credentials token acquired for ARG + Power Platform API + Graph · [ ] SP holds PP-admin role
+**Risks**: ARG access for a service principal may need the directory role *and* an Azure RBAC reader at tenant root — verify in S-1; if SP-on-ARG is blocked, fall back to a delegated token for the spike.
+**Notes**: This single app reg IS the entire identity-side install — no per-env app users (ARG removes that).
 
-#### T-002: Entra app registration + API permissions + admin consent
-**Phase**: 0 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P0 · **Depends on**: none · **Blocked by**: Tenant-admin consent (self, in MVP tenant)
-**Description**: Create the single service principal AgentLens uses for all reads, grant the least-privilege application permissions, and admin-consent in the MVP tenant.
+#### T-002: S-1 — Prove the ARG agent inventory query
+**Phase**: -1 · **Owner**: Elliot · **Effort**: 2h · **Priority**: P0 · **Depends on**: T-001 · **Blocked by**: none
+**Description**: Confirm the headline assumption — that one Azure Resource Graph query returns the MVP tenant's agents with the fields AgentLens needs.
 **Steps**:
-- [ ] Register app `AgentLens-Reader`; create a client secret (dev) and note app/tenant IDs (20m)
-- [ ] Add app permissions: Power Platform API (`https://api.powerplatform.com/.default`), Graph (`Application.Read.All`, `User.Read.All` to resolve owners), App Insights/Log Analytics read (40m)
-- [ ] Grant admin consent; verify with a raw client-credentials token per audience (40m)
-- [ ] Register the SP as a Power Platform admin app where required (`pac admin create-service-principal` / `New-PowerAppManagementApp`) (40m)
-- [ ] Document the exact permission list in /docs (20m)
-**Deliverable**: Consented app registration + a documented permission matrix.
-**Acceptance criteria**:
-- [ ] Client-credentials token acquired for PP API + Graph audiences
-- [ ] SP can list environments via BAP API
-**Risks**: Over-permissioning — keep read-only; flag any write scope. Cert vs secret is an open question (use secret for dev, cert for client/prod).
-**Notes**: This is the entire "install" on the identity side — one app reg, no per-env apps.
+- [ ] POST ARG `/providers/Microsoft.ResourceGraph/resources` with `PowerPlatformResources | where type == 'microsoft.copilotstudio/agents'` (45m)
+- [ ] Verify fields present: ownerId, environmentId, isDefault, channels, model, authentication, sharedWith*, capabilitiesCounts, lastPublishedAt, orchestration (45m)
+- [ ] Record the real response shape + any null/preview fields (30m)
+**Deliverable**: A captured ARG response sample + field-availability table.
+**Acceptance criteria**: [ ] ≥1 agent returned with owner + env + sharing fields · [ ] Field table recorded
+**Risks**: If the MVP tenant has 0 agents → seed first (T-005). If a field is preview/null → note and degrade gracefully.
 
-#### T-003: Token service (MSAL client-credentials, per-audience cache)
-**Phase**: 0 · **Owner**: Elliot · **Effort**: 4h · **Priority**: P0 · **Depends on**: T-002 · **Blocked by**: none
-**Description**: Server-only auth module that issues and caches tokens per audience — including the **per-environment Dataverse audience** (`https://<org>.crm.dynamics.com/.default`), which is the subtle part of multi-env fan-out.
+#### T-003: S-1 — Prove the cost/credit data path
+**Phase**: -1 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P0 · **Depends on**: T-001 · **Blocked by**: none
+**Description**: The #1 risk (R-001). Determine whether per-agent/per-env credit consumption is reachable via the PPAC Licensing API, and confirm the CSV-export fallback shape.
 **Steps**:
-- [ ] `@azure/msal-node` ConfidentialClientApplication wrapper; secret + cert support (1h)
-- [ ] `getToken(audience)` with in-memory expiry cache; `getDataverseToken(orgUrl)` deriving the per-org audience (1.5h)
-- [ ] Graph + App Insights + Licensing audiences wired (45m)
-- [ ] Unit tests with a fake token endpoint (45m)
-**Deliverable**: `lib/auth/tokenService.ts` with cached multi-audience tokens.
-**Acceptance criteria**:
-- [ ] Returns valid tokens for PP API, Graph, and ≥1 Dataverse org audience
-- [ ] Cache prevents duplicate token calls within expiry
-**Risks**: Per-org audience mistakes → 401s; cover with a smoke test in T-005.
-**Notes**: Must run server-side only (route handlers / ingestion worker) — never the browser.
+- [ ] Call the Power Platform / PPAC Licensing API for Copilot Studio credit consumption; capture granularity (per-agent? per-env? per-feature?) (1.5h — learning, 2x)
+- [ ] Export the PPAC credit CSV manually; record its columns as the fallback contract (45m)
+- [ ] Decide v1 cost source: API if per-agent works, else env-level API + CSV per-agent (45m)
+**Deliverable**: "Cost data reality" one-pager — what's available, at what granularity, via which path.
+**Acceptance criteria**: [ ] Per-agent OR per-env credit obtained via API · [ ] CSV fallback columns documented · [ ] v1 cost source decided
+**Risks**: API may be undocumented/limited (the known gap) — the CSV fallback guarantees a path regardless.
+**Notes**: sbrakni + the CS Kit AgentInventoryUsage both pull credit here — proven, just under-documented.
 
-#### T-004: Supabase schema v1
+#### T-004: S-1 — Prove Dataverse deep-scan + decide app-data residency/auth
+**Phase**: -1 · **Owner**: Elliot · **Effort**: 2h · **Priority**: P0 · **Depends on**: T-001 · **Blocked by**: none
+**Description**: Confirm the one thing ARG doesn't give (deep per-agent config via Dataverse `bot`/`botcomponent`), and lock the two governance-of-the-governance-tool decisions.
+**Steps**:
+- [ ] Query Dataverse `bot`/`botcomponent` in one MVP env for fields ARG lacks (instructions, knowledge sources, connector detail) (45m)
+- [ ] Decide AgentLens's own data store + region (D-010) and app login (Entra SSO — D-009) (45m)
+- [ ] Confirm "agent" v1 scope = `microsoft.copilotstudio/agents` only (D-008) (30m)
+**Deliverable**: Deep-scan field list + signed-off D-008/009/010.
+**Acceptance criteria**: [ ] Deep-scan returns config fields · [ ] Data-residency + app-auth decided
+**Risks**: Deep-scan needs a per-env read (a Dataverse app user) — but only for opt-in deep scans, not the core inventory (ARG covers that), so it's a feature flag, not an install blocker.
+
+#### T-005: Seed the MVP tenant with test agents (if empty)
+**Phase**: -1 · **Owner**: Elliot · **Effort**: 1h · **Priority**: P1 · **Depends on**: none · **Blocked by**: none
+**Description**: Ensure there's real, varied data to render and demo — agents with different auth modes, channels, and a default-env one for the sprawl view.
+**Steps**:
+- [ ] Create 2–3 Copilot Studio agents in the MVP tenant (one default-env, one Entra-auth, one anonymous) (45m)
+- [ ] Run a few test conversations to generate credit/transcript data (15m)
+**Deliverable**: ≥2 seed agents with telemetry.
+**Acceptance criteria**: [ ] Agents appear in the ARG query (T-002) · [ ] At least one in the default env
+**Risks**: Seeded credit may take hours to surface — seed early in the spike.
+
+---
+
+### Phase 0 — Foundations (ARG backbone)
+
+#### T-010: Repo upgrade + config + Supabase schema v2
+**Phase**: 0 · **Owner**: Elliot · **Effort**: 4h · **Priority**: P0 · **Depends on**: T-002,T-003 · **Blocked by**: none
+**Description**: Evolve the existing barebones schema/config to the v2 data model (adds credit, capacity, compliance, alerts, migration, assessment, gate-decision tables).
+**Steps**:
+- [ ] Supabase migration `0002`: tables — `environments`, `agents`, `agent_metrics_daily`, `env_capacity`, `compliance_rules`, `compliance_violations`, `alerts`, `migration_tracker`, `assessment_controls`, `assessment_results`, `gate_policies`, `gate_decisions`, `ingestion_runs`, `config` (2h)
+- [ ] Indexes + RLS scaffolding (maker self-service later) (1h)
+- [ ] `.env` wired to the MVP tenant (tenant/client id, secret, ARG scope, Supabase) (1h)
+**Deliverable**: Migration 0002 + MVP-tenant `.env`.
+**Acceptance criteria**: [ ] Migrations apply clean · [ ] Config points at the MVP tenant
+**Risks**: Schema churn — keep metrics in daily fact tables to absorb new measures.
+
+#### T-011: Token service (multi-audience, MVP tenant)
 **Phase**: 0 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P0 · **Depends on**: T-001 · **Blocked by**: none
-**Description**: Define the normalized store that decouples the UI from the APIs and enables history/alerting/migration state.
-**Steps**:
-- [ ] Tables: `environments`, `agents`(envId,botId PK), `agent_metrics_daily`, `dlp_policies`, `agent_sharing`, `alerts`, `migration_tracker`, `ingestion_runs`, `config` (1.5h)
-- [ ] Indexes (envId, botId, metric date); migration files committed (45m)
-- [ ] Seed `config` (thresholds, Teams webhook placeholder) (45m)
-**Deliverable**: Versioned SQL migrations + ER notes in /docs.
-**Acceptance criteria**:
-- [ ] Migrations apply cleanly to a fresh Supabase
-- [ ] `agents` uniquely keyed by (envId, botId)
-**Risks**: Schema churn later — keep metrics in a daily fact table to absorb new measures without reshaping.
-**Notes**: RLS deferred to Phase 5 (maker self-service).
+**Description**: Fill the existing `tokenService` stub — MSAL client-credentials with per-audience cache for ARG/ARM, Power Platform API, Graph, and (deep-scan) per-org Dataverse.
+**Steps**: [ ] ARG/ARM + PP API + Graph audiences (1.5h) · [ ] per-org Dataverse audience for deep scan (45m) · [ ] cache + tests (45m)
+**Deliverable**: Working `lib/auth/tokenService.ts`.
+**Acceptance criteria**: [ ] Tokens for ARG + PP API + Graph against the MVP tenant
+**Risks**: Per-audience errors → covered by S-1 smoke.
 
-#### T-005: Single-environment smoke test (end-to-end auth → data)
-**Phase**: 0 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P0 · **Depends on**: T-003, T-004 · **Blocked by**: Per-env app-user in the test env
-**Description**: Prove the whole spine on ONE environment before building fan-out: token → BAP list envs → pick one → Dataverse `bot` query → write rows to Supabase.
-**Steps**:
-- [ ] Add the SP as a Dataverse application user (read role) in the MVP test env (45m)
-- [ ] Script: list environments (BAP), query `bot` table in the test env, print count (1h)
-- [ ] Upsert environments + agents into Supabase (45m)
-- [ ] Document the per-env app-user step (basis for T-104) (30m)
-**Deliverable**: A script that lands real agents from one env into Supabase.
-**Acceptance criteria**:
-- [ ] ≥1 environment + its agents persisted in Supabase
-- [ ] App-user provisioning steps captured
-**Risks**: App-user role too narrow → empty `bot` reads; verify with System Customizer/read role on the bot tables.
-**Notes**: This de-risks Phase 1's fan-out and the install story in one shot.
+#### T-012: ARG connector (inventory backbone)
+**Phase**: 0 · **Owner**: Elliot · **Effort**: 4h · **Priority**: P0 · **Depends on**: T-002,T-011 · **Blocked by**: none
+**Description**: The core data source — `lib/connectors/argInventory.ts` querying `PowerPlatformResources` and normalizing to the `Agent` + `Environment` DTOs.
+**Steps**: [ ] ARG query + paging (1.5h) · [ ] normalize agents (owner, env, isDefault, sharing, model, auth, connectors) (1.5h) · [ ] environments + env groups (1h)
+**Deliverable**: `argInventory.ts`.
+**Acceptance criteria**: [ ] Returns all MVP-tenant agents normalized · [ ] `isDefault` populated
+**Risks**: ARG schema drift — pin + snapshot-test.
+**Notes**: Replaces the v1 per-env `dataverse.getAgents` for inventory; Dataverse kept only for deep scan.
 
----
+#### T-013: Ingestion orchestrator v2 + scheduler
+**Phase**: 0 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P0 · **Depends on**: T-012 · **Blocked by**: none
+**Description**: ARG-backed ingest (one tenant query, no fan-out) + the run ledger + Vercel Cron + on-demand `/api/ingest`.
+**Steps**: [ ] orchestrator pulls ARG → upsert agents/envs (1.5h) · [ ] `ingestion_runs` ledger (45m) · [ ] cron + protected route (45m)
+**Deliverable**: Scheduled tenant-wide ingest.
+**Acceptance criteria**: [ ] Full ingest populates Supabase · [ ] Run recorded
+**Risks**: ARG throttling — single query is light; back-off on 429.
 
-### Phase 1 — Inventory + Default-Env Sprawl (shippable)
-
-#### T-101: Power Platform / BAP connector
-**Phase**: 1 · **Owner**: Elliot · **Effort**: 4h · **Priority**: P0 · **Depends on**: T-005 · **Blocked by**: none
-**Description**: Normalize environment + copilot/agent listings and the env type (default vs managed) from BAP/PP API — the backbone of the sprawl view.
-**Steps**:
-- [ ] `listEnvironments()` (id, name, type, isDefault, region) (1.5h)
-- [ ] `listCopilots(envId)` where exposed by PP API; reconcile with Dataverse bots (1.5h)
-- [ ] DTO normalization + tests (1h)
-**Deliverable**: `lib/connectors/ppApi.ts`.
-**Acceptance criteria**: [ ] Returns all envs with `isDefault` flag · [ ] Handles paging
-**Risks**: API shape drift — pin api-version; snapshot-test DTOs.
-**Notes**: `isDefault` is what powers the sprawl tracker.
-
-#### T-102: Dataverse connector (bot table + owner resolution)
-**Phase**: 1 · **Owner**: Elliot · **Effort**: 5h · **Priority**: P0 · **Depends on**: T-005 · **Blocked by**: none
-**Description**: Per-env reads of the `bot` table (agents) with owner/maker, timestamps, state, and component-derived connector usage; resolve ownerid → name/email via Graph.
-**Steps**:
-- [ ] `getAgents(orgUrl)`: bot select (name, ownerid, createdon, modifiedon, statecode, schemaname) (1.5h)
-- [ ] Derive `lastActivity` (modifiedon now; transcript-based later) (45m)
-- [ ] Resolve owners via Graph batch; cache (1.5h)
-- [ ] Normalize + upsert to `agents` (1.25h)
-**Deliverable**: `lib/connectors/dataverse.ts`.
-**Acceptance criteria**: [ ] Agents carry resolved owner display name/email · [ ] Idempotent upsert by (envId, botId)
-**Risks**: Graph throttling on owner resolve — batch + cache.
-**Notes**: Connector usage may need the bot components/dependencies query — can be a v1.1 enrichment.
-
-#### T-103: Ingestion orchestrator (multi-env fan-out)
-**Phase**: 1 · **Owner**: Elliot · **Effort**: 5h · **Priority**: P0 · **Depends on**: T-101, T-102 · **Blocked by**: none
-**Description**: Concurrency-bounded fan-out across all environments with per-env isolation (one env's failure doesn't sink the run) and a run ledger.
-**Steps**:
-- [ ] `p-limit` fan-out over envs; per-env try/catch (1.5h)
-- [ ] Write `ingestion_runs` (status, counts, per-env errors) (1h)
-- [ ] `/api/ingest` protected route (cron secret) + on-demand trigger (1.5h)
-- [ ] Vercel Cron schedule (e.g. hourly) (1h)
-**Deliverable**: Scheduled + on-demand ingestion populating Supabase tenant-wide.
-**Acceptance criteria**: [ ] Full-tenant ingest completes with a per-env status report · [ ] A failing env is skipped, not fatal
-**Risks**: Long runs hit serverless timeouts — chunk envs / queue; document Azure Functions path for large tenants.
-**Notes**: Bounded concurrency (e.g. 5) to respect API limits.
-
-#### T-104: Per-environment app-user provisioning script (the install)
-**Phase**: 1 · **Owner**: Elliot · **Effort**: 4h · **Priority**: P0 · **Depends on**: T-005 · **Blocked by**: Admin rights in target envs
-**Description**: The one repeated install step, automated — add the AgentLens SP as a read-only application user across all (or selected) environments via pac / Dataverse Web API.
-**Steps**:
-- [ ] Define a minimal read security role (bot, transcript-aggregate, sharing tables) (1h)
-- [ ] Script: for each env, create application user + assign role (pac admin / Web API) (2h)
-- [ ] Dry-run + idempotency (skip if present) (1h)
-**Deliverable**: `scripts/provision-app-user.ts` + role definition.
-**Acceptance criteria**: [ ] One command provisions the SP across N envs · [ ] Re-runnable without duplicates
-**Risks**: Per-env admin friction at clients — document a manual fallback (PPAC → app users).
-**Notes**: This + T-002 IS the entire install. Headline of the "easier than the Kit" story.
-
-#### T-105: Inventory UI
-**Phase**: 1 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P1 · **Depends on**: T-103 · **Blocked by**: none
-**Description**: The core table — every agent in the tenant with env, owner, state, last activity, filters/search/sort.
-**Steps**:
-- [ ] `/api/agents` read endpoint (Supabase) (45m)
-- [ ] Inventory table (sort/filter by env, owner, state, default-env) (1.5h)
-- [ ] Agent detail drawer (45m)
-**Deliverable**: Inventory page reading from Supabase.
-**Acceptance criteria**: [ ] Lists all agents tenant-wide · [ ] Filter "default env only" works
-**Risks**: Large tenants (1000+ agents) — server-side pagination.
-**Notes**: Recharts summary cards (counts by env/state) up top.
-
-#### T-106: Default-env sprawl + migration tracker UI
-**Phase**: 1 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P0 · **Depends on**: T-105 · **Blocked by**: none
-**Description**: ITER's signature view — every agent in the default environment, its owner, and a migration state machine (to-migrate / notified / moved) tracked in `migration_tracker`.
-**Steps**:
-- [ ] Default-env list with owner + last activity (1h)
-- [ ] Migration status column + bulk "mark notified/moved" → `migration_tracker` (1.5h)
-- [ ] Progress header (X of 460 migrated) (30m)
-**Deliverable**: Sprawl + migration tracker page.
-**Acceptance criteria**: [ ] Shows default-env agents with owners · [ ] Migration state persists and rolls up
-**Risks**: Owner gaps (orphans) — surface "no owner" explicitly as a cleanup signal.
-**Notes**: This is the demo-able "wow" for ITER and the OSS pitch.
+#### T-014: Graph owner-resolution + owner enrichment
+**Phase**: 0 · **Owner**: Elliot · **Effort**: 2h · **Priority**: P1 · **Depends on**: T-012 · **Blocked by**: none
+**Description**: Resolve ARG `ownerId`/`createdBy` GUIDs → names/emails via Graph batch (for the inventory, sprawl owners, and notifications).
+**Steps**: [ ] Graph batch resolve + cache (1.5h) · [ ] enrich agents (30m)
+**Deliverable**: `graph.resolveOwners`.
+**Acceptance criteria**: [ ] Agents show owner name + email
+**Risks**: Graph throttling — batch + cache.
 
 ---
 
-### Phase 2 — Cost + Alerting (shippable)
+### Phase 1 — Inventory + Sprawl (shippable)
 
-#### T-201: Cost / message-volume metrics connector
-**Phase**: 2 · **Owner**: Elliot · **Effort**: 5h · **Priority**: P0 · **Depends on**: T-103 · **Blocked by**: none
-**Description**: Pull the reliable signals — per-agent message/session volume (analytics/Dataverse aggregates) and env-level credit burn (licensing API) — and derive an **estimated** per-agent cost. Honest about the fidelity ceiling (R-001).
-**Steps**:
-- [ ] Message/session counts per agent per day (Dataverse `$apply` aggregate) (2h)
-- [ ] Env credit/capacity burn from licensing API (1.5h)
-- [ ] Cost estimate = volume × rate (config) + model-meter field; persist to `agent_metrics_daily` (1.5h)
-**Deliverable**: `lib/connectors/cost.ts` + daily metrics.
-**Acceptance criteria**: [ ] Per-agent daily volume persisted · [ ] Env credit burn captured · [ ] Estimate labelled "estimated"
-**Risks**: **R-001** per-agent invoice-grade cost not exposed — v1 ships volume + estimate, clearly labelled.
-**Notes**: Model-meter field enables the Claude-premium mis-meter catch.
-
-#### T-202: Metrics history + trends
-**Phase**: 2 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P1 · **Depends on**: T-201 · **Blocked by**: none
-**Description**: Roll daily metrics into 7/30-day baselines used by the UI and the alert engine.
-**Steps**:
-- [ ] Baseline views (7d/30d avg per agent) (1h)
-- [ ] Trend series endpoint (1h)
-- [ ] Backfill handling for gaps (1h)
-**Deliverable**: Baseline/trend queries.
-**Acceptance criteria**: [ ] 7-day avg computed per agent · [ ] Endpoint returns series for charts
-**Risks**: Cold-start (no history) → alerts need ≥N days; gate alerts on min-history.
-**Notes**: Baselines are the anomaly-detection substrate.
-
-#### T-203: Rule / alert engine
-**Phase**: 2 · **Owner**: Elliot · **Effort**: 5h · **Priority**: P0 · **Depends on**: T-202 · **Blocked by**: none
-**Description**: Post-ingest engine that diffs current vs baseline and raises alerts: budget breach, volume spike (>N× 7-day avg), new agent in default env, model-meter mismatch, orphan/idle.
-**Steps**:
-- [ ] Rule definitions + config thresholds (1.5h)
-- [ ] Evaluator runs at end of ingest; writes `alerts` with dedupe (2h)
-- [ ] Severity + state (open/ack/resolved) (1.5h)
-**Deliverable**: `lib/alerts/engine.ts`.
-**Acceptance criteria**: [ ] A simulated 3× spike raises one alert · [ ] No duplicate alert on repeat ingest
-**Risks**: Alert noise — dedupe + min-history + cool-down.
-**Notes**: This is the proactive edge the Kit lacks.
-
-#### T-204: Teams + email dispatch
-**Phase**: 2 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P1 · **Depends on**: T-203 · **Blocked by**: Teams webhook / mail channel
-**Description**: Deliver alerts to a Teams channel (incoming webhook) and email (Graph sendMail or Resend), config-driven per tenant.
-**Steps**:
-- [ ] Teams Adaptive Card payload + webhook post (1.5h)
-- [ ] Email path (Graph sendMail) (1h)
-- [ ] Config UI field for webhook/recipients (30m)
-**Deliverable**: Alert delivery to Teams + email.
-**Acceptance criteria**: [ ] Test alert lands in Teams + inbox · [ ] Channel configurable
-**Risks**: Webhook secrecy — store in `config`/secrets, never in repo.
-**Notes**: Teams card deep-links back to the agent in AgentLens.
-
-#### T-205: Cost UI (per-agent, trends, anomaly flags)
-**Phase**: 2 · **Owner**: Elliot · **Effort**: 3h · **Priority**: P1 · **Depends on**: T-202, T-203 · **Blocked by**: none
-**Description**: Cost dashboard — per-agent estimated spend, trend charts, top burners, and anomaly flags from the engine.
-**Steps**:
-- [ ] Cost table (sort by spend, Δ vs baseline) (1h)
-- [ ] Trend charts (Recharts) + "top 10 burners" (1.5h)
-- [ ] Anomaly + alert badges (30m)
-**Deliverable**: Cost page + Alerts page.
-**Acceptance criteria**: [ ] Top burners ranked · [ ] Anomalies visibly flagged
-**Risks**: Estimate misread as invoice — label "estimated" prominently.
-**Notes**: The $300/week watchdog, visualized.
+#### T-020: Inventory UI (ARG-backed) — P0, 4h, deps T-013
+Filterable/sortable table of every agent (env, owner, state, model, auth, channels, last activity), summary KPI cards. **Deliverable**: Inventory page. **Acceptance**: all MVP agents listed; filter default-env. **Risk**: large tenants → server pagination.
+#### T-021: Default-env Sprawl + Migration tracker — P0, 4h, deps T-020
+Default-env agents with owners; migration state machine (to_migrate/notified/moved) in `migration_tracker`; progress rollup. **Deliverable**: Sprawl page. **Acceptance**: state persists + rolls up. **Risk**: orphans (no owner) surfaced explicitly.
+#### T-022: Agent detail drawer (tabbed shell) — P1, 4h, deps T-020
+Tabbed view: Overview / Knowledge / Credits / Compliance / Analytics (Credits/Compliance fill in later phases). **Deliverable**: detail drawer. **Acceptance**: Overview tab renders ARG fields.
+#### T-023: Read API + Zustand store wiring — P1, 3h, deps T-013
+`/api/agents`, `/api/environments`; client store; "Refresh" triggers on-demand ingest. **Deliverable**: read endpoints. **Acceptance**: UI reads from Supabase fast.
+#### T-024: Sharing audit + orphan view (from ARG) — P1, 3h, deps T-020
+Surface `sharedWithViewers/Editors` + entire-tenant shares + ownerless agents (ARG already has these). **Deliverable**: Sharing/orphan view. **Acceptance**: entire-tenant-shared agents flagged.
 
 ---
 
-### Phase 3 — Governance posture (lighter detail)
+### Phase 2 — Cost + Capacity + Alerting (shippable)
 
-#### T-301: DLP posture per environment (P1, 6h, depends T-101)
-Pull DLP policies + connector classifications via BAP Governance API; show per-env Business/Non-Business/Blocked and flag risky/blocked connectors on agents. **Deliverable**: DLP view. **Acceptance**: per-env classification rendered; agent↔connector risk surfaced. **Risk**: BAP read perms.
-
-#### T-302: Sharing audit (P2, 5h, depends T-102)
-Read principalaccess/sharing for agents; show who can access what; flag broad shares. **Deliverable**: Sharing view. **Acceptance**: per-agent access list. **Risk**: sharing tables read role.
-
-#### T-303: Orphan / idle / zombie detection (P1, 5h, depends T-202)
-Rules: no owner, no activity in N days, capacity-consuming with zero usage → retire candidates. **Deliverable**: Cleanup worklist + alert rule. **Acceptance**: candidates listed with reason. **Risk**: "activity" fidelity → combine modifiedon + transcript counts.
-
-### Phase 4 — KPIs + Health (lighter detail)
-
-#### T-401: Conversation KPI aggregates (P2, 8h, depends T-102) — PII-safe
-Aggregate `conversationtranscripts` via Dataverse `$apply` (counts by day/agent, deflection/escalation proxies); **never store content**. **Deliverable**: KPI view. **Acceptance**: volume/deflection trends; zero raw transcript stored. **Risk**: **R-002** PII + volume → aggregate-only, sampling.
-
-#### T-402: App Insights health (P2, 8h, depends T-003)
-KQL over App Insights for agent error rate/latency/failed sessions; map to agents. **Deliverable**: Health view. **Acceptance**: error/latency per agent. **Risk**: requires App Insights resource + read perms; not all tenants wire it.
-
-### Phase 5 — AI + Lifecycle + Maker (lighter detail)
-
-#### T-501: NL query (text-to-SQL, constrained) (P2, 6h, depends T-105)
-Claude/Ollama translate NL → read-only SQL over an allowlisted Supabase schema; render results. **Deliverable**: Ask-bar. **Acceptance**: "agents in default env over $50/mo" returns correct rows. **Risk**: SQL injection/over-reach → read-only role, table allowlist, query validation. **PII**: tenant-identifying data → Claude direct, not Ollama (Elliot's rule).
-
-#### T-502: AI governance summaries + recommendations (P3, 4h, depends T-303)
-Scheduled AI summary of posture + retire/migrate/optimize recommendations. **Deliverable**: Weekly summary card + optional Teams digest. **Acceptance**: actionable recs generated. **Risk**: hallucinated recs → ground strictly on DB rows.
-
-#### T-503: Lifecycle + prod-entry checklist (P2, 5h, depends T-105)
-Maturity stage per agent (PoC→pilot→prod), enforce a prod-entry checklist, change/version history from modifiedon. **Deliverable**: Lifecycle view. **Acceptance**: stage + checklist persisted. **Risk**: stage is manual metadata → store in our DB.
-
-#### T-504: Maker self-service (role-aware) (P3, 5h, depends T-101)
-Supabase RLS + auth so makers see only their own agents' cost/health. **Deliverable**: Maker view. **Acceptance**: maker sees only owned agents. **Risk**: identity mapping maker→ownerid; auth model (Entra SSO for the app).
-
-### Phase 6 — OSS hardening + publish (lighter detail)
-
-#### T-601: Docs + install guide (P1, 5h)
-README, architecture doc, the 4-step install, permission matrix, screenshots. **Acceptance**: a stranger can install from docs alone.
-#### T-602: Install script polish + setup wizard page (P1, 5h, depends T-104)
-One-command provisioning + an in-app setup wizard (tenant id, webhook, thresholds). **Acceptance**: green-field install < 20 min.
-#### T-603: Branding, license, public release (P1, 3h)
-MIT license, logo, GitHub release, topics. **Acceptance**: public repo + tagged release → MVP OSS contribution logged.
-#### T-604: Demo prep (community talk) (P2, 3h, depends T-106, T-205)
-Demo script + slides ("a lighter alternative to the Copilot Studio Kit"). **Acceptance**: 10-min demo runs end-to-end → MVP talk goal.
+#### T-030: Credit cost connector (Licensing API + CSV fallback) — P0, 5h, deps T-003
+Per-agent/per-env daily credit from the PPAC Licensing API; CSV-import parser as fallback; feature-level split (Generative Answers, Agent Actions, Agent Flows, Text Tools). **Deliverable**: `cost.ts` + CSV importer. **Acceptance**: daily credit persisted (API or CSV); feature breakdown captured. **Risk**: R-001 — CSV guarantees a path.
+#### T-031: Metrics history, MTD + projected monthly — P1, 3h, deps T-030
+`agent_metrics_daily` rollups; 7/30-day baselines; month-to-date + projected monthly total. **Deliverable**: baseline/trend queries. **Acceptance**: projection computed per agent.
+#### T-032: Environment capacity monitoring — P1, 4h, deps T-030
+Per-env credit capacity vs consumption; overage detection; capacity gauges. **Deliverable**: `env_capacity` + gauge UI. **Acceptance**: overage flagged at threshold.
+#### T-033: Rule/alert engine — P0, 5h, deps T-031,T-032
+Diff vs baseline; rules: budget breach, volume/credit spike (>3x 7-day), env overage, new default-env agent, high-consumption, model-meter mismatch, orphan/idle. Severity + dedupe + cooldown. **Deliverable**: `alerts/engine.ts`. **Acceptance**: simulated 3x spike raises one alert.
+#### T-034: Teams + email dispatch (severity routing) — P1, 4h, deps T-033
+Adaptive Cards w/ deep links; routing Critical→Teams+Email, High→Teams, Med/Low→in-app; config-driven channel. **Deliverable**: alert delivery. **Acceptance**: test alert lands in Teams + inbox.
+#### T-035: Cost + Alerts UI — P1, 5h, deps T-031,T-033
+Cost dashboard (top burners, Δ vs baseline, projections, feature split), capacity gauges, alerts page w/ ack + bulk ops. **Deliverable**: Cost + Alerts pages. **Acceptance**: top burners ranked; anomalies badged; "estimated" labelled.
 
 ---
 
-## Dependency Map
+### Phase 3 — Compliance Engine + Risky-Pattern Detection (advanced)
+
+#### T-040: Compliance rule model + seed rules — P1, 5h, deps T-013
+Data-driven rules (`compliance_rules`): types Authentication / Data-Loss / Knowledge-Source / Channel / Connector; severity Critical/Warning/Info; ship a default rule pack. **Deliverable**: rule schema + seed pack. **Acceptance**: rules editable; seed pack loads.
+#### T-041: Compliance evaluator (runs each sync) — P1, 5h, deps T-040
+Evaluate every agent against rules on each ingest; write `compliance_violations`; lifecycle Open→Ack→Resolved/Suppressed. **Deliverable**: evaluator. **Acceptance**: violations created + transition through lifecycle.
+#### T-042: Risky-pattern detection — P1, 5h, deps T-012
+Flag autonomous (generative) agents, maker-cred usage, HTTP-request actions, anonymous/no-auth, computer-use, entire-tenant shares, risky connectors (mostly from ARG `authentication`/`capabilitiesCounts`/`orchestration`). **Deliverable**: pattern rules + flags. **Acceptance**: each pattern detectable on seed data.
+#### T-043: Compliance scoring (agent + tenant) — P2, 4h, deps T-041
+Weighted score per agent + tenant rollup; compliance badges in UI. **Deliverable**: scoring + badges. **Acceptance**: tenant score + per-agent badges render.
+#### T-044: Compliance center UI + optional auto-remediation — P2, 5h, deps T-041
+Rule management, violation queue w/ bulk ops; opt-in auto-remediation (advisory/notify by default; forced actions feature-flagged off). **Deliverable**: Compliance Center. **Acceptance**: rules managed; violations actioned. **Risk**: auto-remediation is dangerous → default advisory only.
+
+---
+
+### Phase 4 — KPIs + Health + Reporting/Exec (advanced)
+
+#### T-050: Conversation KPI aggregates (PII-safe) — P2, 6h, deps T-011
+Dataverse `$apply` aggregates (volume/deflection/escalation by day/agent); never store content. **Acceptance**: trends render; zero raw transcript stored. **Risk**: R-002 PII → aggregate-only.
+#### T-051: App Insights health — P2, 6h, deps T-011
+KQL over App Insights for agent error/latency/failed-sessions where wired. **Acceptance**: per-agent health where App Insights exists.
+#### T-052: Executive overview dashboard — P2, 4h, deps T-035,T-043
+KPI cards + trend charts (agents, cost, compliance score, alerts, capacity). **Acceptance**: one-glance tenant posture.
+#### T-053: Weekly governance report (PDF + Teams) — P2, 5h, deps T-052
+Auto-generated weekly summary → email/Teams + PDF (reuse JumpStart doc-gen patterns). **Acceptance**: scheduled weekly report delivered.
+#### T-054: Deep-scan on demand — P2, 3h, deps T-022
+On-demand Dataverse deep scan for one agent (knowledge sources, instructions, connector detail) into the detail drawer. **Acceptance**: deep scan populates Knowledge tab.
+
+---
+
+### Phase 5 — Maturity Assessment Engine (advanced)
+
+#### T-060: Controls library + governance pillars/zones — P2, 6h, deps T-013
+Controls across Security/Management/Reporting pillars, tiered zones; map controls → telemetry signals already collected. **Acceptance**: control library loads; signals mapped.
+#### T-061: Maturity scoring 0-4 (honest partial-cap) — P2, 6h, deps T-060
+Score each control 0-4 against zone thresholds; **partial-capped auto-scoring** — telemetry never asserts full compliance, always cites residual manual/attestation burden. **Acceptance**: scores never return "full" from telemetry alone; residual cited. **Risk**: false assurance → the partial-cap principle is mandatory.
+#### T-062: Regulatory mapping + assessment report + questionnaire — P3, 6h, deps T-061
+Regulation→control map; report generator (auto-filled telemetry controls + manual questionnaire for attestation controls) + RACI/checklist. **Acceptance**: report distinguishes auto vs manual evidence.
+#### T-063: Maturity dashboard — P3, 4h, deps T-061
+Pillar/zone heatmap + maturity trend. **Acceptance**: maturity visualized over time.
+
+---
+
+### Phase 6 — Release Gates + Policy-as-Code (advanced)
+
+#### T-070: Policy-as-code engine (YAML) — P2, 6h, deps T-013
+YAML policy schema (conditions over agent/compliance/cost fields) + evaluator + policy unit tests. **Acceptance**: a sample policy evaluates against an agent; unit tests pass.
+#### T-071: Release / prod-entry gate — P2, 6h, deps T-070
+Evaluate an agent against policies before promotion (PoC→pilot→prod); pass/block verdict + prod-entry checklist enforcement; advisory-by-default (notify, don't force). **Acceptance**: an unready agent is blocked w/ reasons.
+#### T-072: Signed decision records + audit replay + revocation — P3, 5h, deps T-071
+HMAC-signed `gate_decisions`; audit replay; revoke (keeps original signed payload for replay). **Acceptance**: decision verifiable + revocable.
+#### T-073: Inbound trust gate (external/A2A) — P3, 4h, deps T-070
+Evaluate external/A2A agents (signature/registration) before trust. **Acceptance**: unsigned external agent blocked. **Notes**: lower priority for single-tenant internal focus.
+#### T-074: Optional MCP server (verdict query) — P3, 5h, deps T-071
+Expose AgentLens governance verdicts via an MCP server so Copilot Studio agents can query them. **Acceptance**: MCP returns a verdict for an agent. **Notes**: showcase feature; ties to Elliot's MCP work.
+
+---
+
+### Phase 7 — AI Layer + Maker Self-Service (advanced)
+
+#### T-080: NL query (text-to-SQL, constrained) — P2, 6h, deps T-020
+Claude/Ollama → read-only SQL over an allowlisted Supabase schema; Claude for tenant data, Ollama only on anonymized. **Acceptance**: "default-env agents over $50/mo" returns correct rows. **Risk**: over-reach → read-only role + allowlist + validation.
+#### T-081: AI governance summaries + recommendations — P3, 4h, deps T-043,T-061
+Scheduled AI posture summary + retire/migrate/optimize recs, grounded strictly on DB rows. **Acceptance**: actionable recs generated.
+#### T-082: Maker self-service (role-aware RLS) — P3, 5h, deps T-014
+Supabase RLS + Entra SSO so makers see only their own agents' cost/health/compliance. **Acceptance**: maker sees only owned agents.
+#### T-083: Lifecycle stages + prod-entry checklist — P2, 5h, deps T-021
+Maturity stage per agent (PoC→pilot→prod) + checklist (feeds the release gate). **Acceptance**: stage + checklist persist.
+
+---
+
+### Phase 8 — OSS Hardening + Publish + Demo
+
+#### T-090: Docs + install guide — P1, 5h
+README, architecture, the install (web app + 1 app reg + ARG), permission matrix, screenshots from the MVP tenant. **Acceptance**: a stranger installs from docs.
+#### T-091: Install/setup wizard + config UI — P1, 5h, deps T-010
+In-app setup (tenant id, app reg, Teams webhook, thresholds, rule packs). **Acceptance**: green-field setup < 20 min.
+#### T-092: Branding, license, public release — P1, 3h
+MIT (pending IP clearance — R-010), logo, GitHub release, topics → log MVP OSS contribution. **Acceptance**: public repo + tagged release.
+#### T-093: Demo + community talk prep — P2, 3h, deps T-021,T-035
+Demo script + slides ("standalone, alerting-first alternative to the Kit, built on the new ARG inventory"), recorded from the MVP tenant. **Acceptance**: 10-min demo runs end-to-end.
+
+---
+
+## Dependency Map (critical/early)
 | Task | Depends On | Blocks | Parallel With | Wait Time |
 |------|-----------|--------|---------------|-----------|
-| T-001 | none | T-004 | T-002 | - |
-| T-002 | none | T-003, T-104 | T-001 | Admin consent (self) |
-| T-003 | T-002 | T-005 | T-004 | - |
-| T-004 | T-001 | T-005 | T-003 | - |
-| T-005 | T-003, T-004 | T-101, T-102, T-104 | - | Per-env app-user |
-| T-101 | T-005 | T-103, T-301, T-504 | T-102 | - |
-| T-102 | T-005 | T-103, T-302, T-401 | T-101 | - |
-| T-103 | T-101, T-102 | T-105, T-201 | T-104 | - |
-| T-104 | T-005 | T-602 | T-103 | Env admin rights |
-| T-105 | T-103 | T-106, T-205, T-501, T-503 | - | - |
-| T-106 | T-105 | T-604 | - | - |
-| T-201 | T-103 | T-202 | - | - |
-| T-202 | T-201 | T-203, T-205, T-303 | - | ≥7d history |
-| T-203 | T-202 | T-204, T-205 | - | - |
-| T-204 | T-203 | - | T-205 | Teams webhook |
-| T-205 | T-202, T-203 | T-604 | T-204 | - |
+| T-001 | none | T-002,T-003,T-004,T-011 | T-005 | MVP admin consent |
+| T-002 | T-001 | T-012 | T-003,T-004 | — |
+| T-003 | T-001 | T-030 | T-002,T-004 | — |
+| T-004 | T-001 | T-054 | T-002,T-003 | — |
+| T-005 | none | T-002 (data) | T-001 | credit lag |
+| T-010 | T-002,T-003 | T-011..T-013 | — | — |
+| T-011 | T-001 | T-012,T-050,T-051 | T-010 | — |
+| T-012 | T-002,T-011 | T-013,T-020,T-042 | — | — |
+| T-013 | T-012 | T-020,T-030,T-040,T-060,T-070 | T-014 | — |
+| T-020 | T-013 | T-021,T-022,T-024,T-080 | — | — |
+| T-030 | T-003,T-013 | T-031,T-032 | — | — |
+| T-033 | T-031,T-032 | T-034,T-035 | — | — |
 
 ## Critical Path
 ```
-T-002 (3h) → T-003 (4h) → T-005 (3h) → T-103* (depends T-101 4h + T-102 5h) → T-201 (5h) → T-202 (3h) → T-203 (5h) → T-205 (3h)
-Core spine to shippable cost+alerting v1 ≈ 3+4+3+9+5+3+5+3 = 35h critical, ~52h with the Phase-1 inventory/sprawl UI on the path.
-With 20% buffer: ~62h to a demo-able, shippable v1 (Phases 0–2).
+T-001 (2h) → T-002 (2h) → T-012 (4h) → T-013 (3h) → T-030 (5h) → T-031 (3h) → T-033 (5h) → T-035 (5h)
+Spine to shippable cost+alerting v1 ≈ 29h + Phase-1 inventory/sprawl UI on path ≈ 46h.
+With 20% buffer: ~55h to a demo-able, shippable v1 (Phases -1→2).
 ```
-**Note**: T-202 introduces a real-time wait — alerts need ≥7 days of metric history before they're trustworthy. Start ingestion (Phase 1) early so history accrues while Phase 2 UI is built.
+**Real-time wait:** alerts need ≥7 days of metric history — start ingestion (Phase 0/1) early so baselines accrue while Phase 2 UI is built.
 
-## Timeline
-Anchored to part-time capacity (~6–8 h/week) vs the Aug 31 MVP-OSS-goal deadline (80 days). Front-load ingestion so baselines accrue.
+## Timeline (vs Aug 31 MVP-OSS anchor, ~6–8h/week)
+| Weeks | Phases | Hours | Milestone |
+|-------|--------|-------|-----------|
+| Wk 1 | -1 (spike) + start 0 | 14h | **Data contract proven in MVP tenant** |
+| Wk 2–3 | 0 + 1 | 30h | **Shippable: inventory + sprawl/migration; ingestion live** |
+| Wk 4–5 | 2 | 26h | **Shippable: cost/capacity watchdog + Teams alerts** ← v1 done (~Aug) |
+| Wk 6–7 | 3 | 24h | Compliance engine + risky patterns |
+| Wk 8–9 | 4 | 24h | KPIs + health + weekly report + exec |
+| Wk 10–11 | 5 | 22h | Maturity assessment |
+| Wk 12–13 | 6 | 26h | Release gates + policy-as-code |
+| Wk 14 | 7 | 20h | AI + maker view |
+| Wk 15 | 8 | 16h | **Public OSS release + demo** |
 
-### Phase 0–1 (Wk 1–3): Foundations + shippable Inventory/Sprawl — 40h
-| Week | Tasks | Hours | Milestone |
-|------|-------|-------|-----------|
-| Wk 1 | T-001, T-002, T-003, T-004 | 13h | Auth + schema ready |
-| Wk 2 | T-005, T-101, T-102 | 13h | Real agents in Supabase tenant-wide |
-| Wk 3 | T-103, T-104, T-105, T-106 | 15h | **Shippable: live inventory + migration tracker; ingestion running (history accruing)** |
-
-### Phase 2 (Wk 4–5): Cost + Alerting — 24h
-| Week | Tasks | Hours | Milestone |
-|------|-------|-------|-----------|
-| Wk 4 | T-201, T-202 | 8h | Per-agent volume + estimated cost |
-| Wk 5 | T-203, T-204, T-205 | 11h | **Shippable: anomaly alerts → Teams/email; cost dashboard** |
-
-### Phase 3–6 (Wk 6–10): Governance, KPIs, AI, Lifecycle, OSS — 68h
-| Week | Tasks | Hours | Milestone |
-|------|-------|-------|-----------|
-| Wk 6 | T-301, T-302, T-303 | 16h | Governance posture |
-| Wk 7 | T-401, T-402 | 16h | KPIs + health |
-| Wk 8–9 | T-501, T-502, T-503, T-504 | 20h | AI query + lifecycle + maker view |
-| Wk 10 | T-601, T-602, T-603, T-604 | 16h | **Public OSS release + demo deck (MVP goals logged)** |
+**v1 (Phases -1→2) lands within the Aug-31 window; Phases 3–8 are the post-v1 governance-platform roadmap.**
 
 ---
 
 ## Risk Register
-| # | Risk | Likelihood | Impact | Mitigation | Owner |
-|---|------|-----------|--------|-----------|-------|
-| R-001 | Per-agent **invoice-grade cost** isn't exposed by any single public API | H | H | v1 ships per-agent **volume** + **estimated** cost (labelled) + env credit burn; alert on volume spikes (the leading indicator). Document the ceiling openly. | Elliot |
-| R-002 | Conversation transcripts carry **PII** and are high-volume | H | H | Aggregate-only via Dataverse `$apply`; never store content; sample; defer to Phase 4 | Elliot |
-| R-003 | **Per-env app-user** provisioning friction at clients | M | M | Automated script (T-104) + manual PPAC fallback; gracefully skip un-provisioned envs | Elliot |
-| R-004 | Serverless **timeouts** on large-tenant ingestion (1000+ agents) | M | M | Bounded concurrency + chunked/queued runs; documented Azure Functions path | Elliot |
-| R-005 | **API drift** (PP/BAP/licensing endpoints change) | M | M | Pin api-versions; snapshot-test DTOs; isolate per-connector | Elliot |
-| R-006 | **Token/audience** mistakes (per-org Dataverse audience) → 401s | M | M | Smoke test (T-005) before fan-out; per-audience cache tests | Elliot |
-| R-007 | Capacity: client load (ITER etc.) starves the side-project | H | M | Phase to **shippable at Phase 2**; each phase independently valuable; no hard deadline | Elliot |
-| R-008 | Sending tenant data to 3rd-party model (Ollama) in AI layer | L | H | Claude-direct for tenant-identifying data; Ollama only on anonymized aggregates (Elliot's PII rule) | Elliot |
+| # | Risk | L | I | Mitigation | Owner |
+|---|------|---|---|------------|-------|
+| R-001 | Per-agent credit cost not cleanly API-exposed | M | H | Licensing API + **CSV-import fallback** (proven by sbrakni + CS Kit); env-level if per-agent fails; label estimated | Elliot |
+| R-002 | Transcript PII / volume | H | H | Aggregate-only via `$apply`; no content stored | Elliot |
+| R-003 | ~~Per-env app-user provisioning friction~~ **RETIRED** — ARG removes it | — | — | ARG `PowerPlatformResources` is tenant-wide; deep-scan app-user is opt-in only | Elliot |
+| R-004 | Serverless timeouts on ingest | L | M | ARG is one light query (not fan-out); back-off; Azure Functions path documented | Elliot |
+| R-005 | ARG / Licensing API schema drift | M | M | Pin api-versions; snapshot-test DTOs | Elliot |
+| R-006 | Token/ARG-RBAC for the SP blocked | M | H | S-1 proves SP-on-ARG; delegated-token fallback for spike; PP-admin role assigned | Elliot |
+| R-007 | Capacity: client load starves the build | H | M | Phase to shippable at Phase 2; each phase independent | Elliot |
+| R-008 | Tenant data → 3rd-party model (Ollama) | L | H | Claude-direct for tenant data; Ollama only anonymized | Elliot |
+| R-009 | Cost-data contract unproven before build | M | H | Phase -1 S-1 spike gates all build | Elliot |
+| R-010 | IP ownership (personal vs Witivio) blocks OSS publish | M | M | Clarify with Witivio before T-092; stays private until resolved | Elliot |
+| R-011 | Agent 365 / native PPAC obsoletes scope | M | M | Position as complement; durable wedge = standalone form + alerting + migration + policy-as-code gates + honest maturity (native + competitors don't combine these) | Elliot |
+| R-012 | AgentLens itself ungoverned (god-mode SP + PII in 3rd-party DB) | M | H | Read-only SP, least-priv, data-residency decision (D-010), no transcript content | Elliot |
+| R-013 | Crowded 0-star space — low OSS traction | M | L | Build for Elliot's own use + MVP credibility first; traction is upside, not the goal | Elliot |
+| R-014 | Auto-remediation / forced gate actions cause harm | M | H | Advisory/notify by default; forced actions feature-flagged OFF; read-only client posture | Elliot |
 
 ## Decision Log
-| # | Decision | Date | Rationale | Decided By |
-|---|----------|------|-----------|-----------|
-| D-001 | Needs a DB — use **Supabase/Postgres** | 2026-06-12 | History for anomaly baselines, stateful migration tracker, API rate limits forbid live per-load calls, alerting needs prior-state diff | Elliot |
-| D-002 | OSS reference deploy = **Vercel + Supabase**; documented **Azure** path for client/residency | 2026-06-12 | Lightest for OSS/MVP-tenant; Azure for client data-residency + App Insights proximity | Elliot |
-| D-003 | v1 = **Inventory + Sprawl + Cost + Alerting** (Phases 0–2); defer governance/KPI/AI/lifecycle | 2026-06-12 | Targets ITER's real pain fastest; independently shippable | Elliot |
-| D-004 | Cost v1 = **estimated from volume** + env credit burn (not invoice-grade) | 2026-06-12 | Per-agent invoice cost not exposed (R-001); volume is the actionable leading indicator | Elliot |
-| D-005 | Transcripts = **aggregate-only**, no content stored | 2026-06-12 | PII + volume (R-002) | Elliot |
-| D-006 | Install = **1 Entra app reg + per-env read app-user** (read-only posture) | 2026-06-12 | The "easier than the Kit" core; nothing imported into client envs | Elliot |
-| D-007 | **Decline** the Kit's test-automation + PowerShield approval-workflow features | 2026-06-12 | Stateful Dataverse-native; high effort, off-goal; monitor DLP, don't replace the approval engine | Elliot |
+| # | Decision | Date | Rationale |
+|---|----------|------|-----------|
+| D-001 | DB = Supabase/Postgres | 2026-06-12 | History for baselines, stateful migration/violations/gates, rate-limit shield |
+| D-002 | OSS deploy = Vercel + Supabase; Azure path documented | 2026-06-12 | Lightest for OSS/MVP; Azure for client residency |
+| D-003 | v1 = inventory + sprawl + cost + alerting (Phases -1→2) | 2026-06-12 | ITER pain; independently shippable |
+| D-004 | Cost v1 = estimated (credit/volume) + CSV fallback | 2026-06-12 | Invoice-grade not exposed (R-001) |
+| D-005 | Transcripts aggregate-only | 2026-06-12 | PII (R-002) |
+| D-006 | Install = 1 Entra app reg + ARG (read-only) | 2026-06-12 | The "easier than the Kit" core |
+| D-007 | Decline CS Kit test-automation + PowerShield approval workflows | 2026-06-12 | Off-goal, Dataverse-native |
+| D-008 | "Agent" v1 = `microsoft.copilotstudio/agents` only | 2026-06-12 | ARG type; M365/Agent365 future |
+| D-009 | App auth = Entra SSO from day 0 | 2026-06-12 | Admin surface needs authn/authz |
+| D-010 | App data store + region decided in Phase -1 | 2026-06-12 | Self-governance / client DPO |
+| D-011 | One instance per client tenant | 2026-06-12 | Isolation/residency |
+| **D-012** | **Inventory backbone = Azure Resource Graph (`PowerPlatformResources`)** | 2026-06-12 | Microsoft now exposes whole-tenant agents in one query → kills per-env fan-out + app-user provisioning (retires R-003) |
+| **D-013** | **Cost = PPAC Licensing API + manual CSV fallback** | 2026-06-12 | Proven path (sbrakni + CS Kit AgentInventoryUsage); CSV guarantees a route |
+| **D-014** | **Validate in MVP tenant first (dev/demo/OSS bed), then client tenants** | 2026-06-12 | Safe, real data, no client risk during build |
+| **D-015** | **Release-gate + auto-remediation actions are advisory/notify by default; forced actions feature-flagged OFF** | 2026-06-12 | Read-only posture; avoid harm in client tenants (R-014) |
+| **D-016** | **Maturity auto-scoring is partial-capped (never asserts full compliance from telemetry)** | 2026-06-12 | Honesty — adopted from FSI-AgentGov; avoids false assurance |
+| **D-017** | **Standalone Next.js web app form (not a Power Platform solution)** | 2026-06-12 | The differentiator vs sbrakni/the Kit (in-platform); install-light |
 
 ## Open Questions
-- [ ] Confirm v1 = Inventory + Sprawl + Cost + Alerting, with Phases 3–6 as iteration? (assumed yes — D-003)
-- [ ] OSS reference deploy on **Vercel** or **Azure** first? (assumed Vercel — D-002)
-- [ ] **Cert vs secret** for the app registration in the MVP-tenant dev phase? (assumed secret for dev, cert for client/prod)
-- [ ] Is **estimated** per-agent cost acceptable for v1, or is invoice-grade a hard requirement? (assumed estimated — D-004)
-- [ ] Product **name**: AgentLens, or something else (brand check + GitHub/namespace availability)?
-- [ ] Does ITER want to be the **named pilot** for AgentLens, or keep it MVP-tenant-only until published?
+- [ ] IP: personal or Witivio-owned? (gates OSS publish — R-010)
+- [ ] Does the MVP-tenant SP get ARG access via directory role alone, or also Azure RBAC at root? (S-1 / R-006)
+- [ ] Per-agent credit from the Licensing API, or env-level + CSV per-agent? (S-1 — T-003)
+- [ ] Does ITER's DPO accept the app's data store/region when it goes to a client? (D-010)
+- [ ] Product name: AgentLens, or something else (brand/namespace check)?
+- [ ] How far to take release gates / MCP server for a single-tenant internal tool (Phase 6 priority)?
 
 ## Success Criteria
-- [ ] Installs on a fresh tenant in **< 20 min** with no Dataverse managed-solution import (web app + 1 app reg + provisioning script)
-- [ ] Renders **every agent across all environments** with owner, env, and default-env flag
-- [ ] **Default-env migration tracker** shows owners and persists migration state (the ITER worklist)
-- [ ] A simulated cost/volume spike fires a **Teams + email alert** within one ingest cycle
-- [ ] Published **open-source** on GitHub (MIT) with a working install guide → logged as MVP **OSS-creator** contribution
-- [ ] **10-minute demo** runs end-to-end → MVP community-talk material
-- [ ] Honest cost labelling (no "invoice-grade" claim where it's estimated)
-```
-
----
-
-## Addendum: Robustness Upgrade + Phase -1 Validation Spike (2026-06-12)
-Closes the gaps from the "what's missing" review. **No build hour is spent until Phase -1 passes.**
-
-### Phase -1 — Validation Spike (1 day, BLOCKS all build)
-Proves the proposal rests on real data, not assumptions, in Elliot's **MVP tenant**.
-- **S-1 Data-contract spike (P0, 4h):** with the app registration, actually call (a) BAP/PP API `listEnvironments` + agent list, (b) Dataverse `bot` table in 1 env, (c) the **cost/usage source** — verify whether per-agent message/credit data is in Dataverse, Copilot Studio analytics, or App Insights, and whether the SP can read it. **Output:** a one-page "what data actually exists + which API serves it" doc. Kills R-001/R-009.
-- **S-2 Agent-scope decision (P0, 1h):** define "agent" = Copilot Studio custom agents (Dataverse `bot`) for v1; explicitly note M365 declarative agents + Agent 365 agents are **out of v1** (different sources). 
-- **S-3 App-data-residency decision (P0, 1h):** decide where AgentLens stores its OWN data (Supabase region / self-hosted Postgres / Azure) and whether that's acceptable for a sensitive client (ITER DPO). A governance tool cannot be ungoverned.
-- **S-4 App auth decision (P0, 1h):** how humans log into AgentLens (Entra SSO from day one, not deferred). 
-- **Gate:** if S-1 shows the cost data isn't readable, re-scope cost → volume-only before building.
-
-### New Decisions
-| # | Decision | Rationale |
-|---|----------|-----------|
-| D-008 | "Agent" v1 = Copilot Studio custom agents (Dataverse `bot`); M365 declarative + Agent 365 = out of scope v1 | Different data sources; keeps the connector layer tractable |
-| D-009 | AgentLens app auth = **Entra SSO from day 0** (not deferred to Phase 5) | Even the admin surface needs authn/authz immediately |
-| D-010 | App's own data store + region decided in Phase -1 before build | Self-governance / client DPO acceptability |
-| D-011 | One AgentLens **instance per client tenant** (no shared multi-tenant DB) | Isolation, residency, blast-radius — matches "single tenant" |
-
-### New Risks
-| # | Risk | L | I | Mitigation |
-|---|------|---|---|------------|
-| R-009 | Cost/usage data not readable by the SP / not in a queryable store | M | H | Phase -1 S-1 spike proves it BEFORE build; fallback = volume-only |
-| R-010 | IP ownership (personal vs Witivio) blocks OSS publish | M | M | Clarify with Witivio before T-603 publish; can stay private until resolved |
-| R-011 | Microsoft Agent 365 (01/07) / native governance obsoletes parts | M | M | Position as complementary (sprawl + alerting Microsoft doesn't do); revisit scope post-A365 GA |
-| R-012 | AgentLens itself ungoverned (god-mode SP + PII in 3rd-party DB) | M | H | Read-only SP, least-priv role, app-data-residency decision (D-010), no transcript content stored |
-
-### New Open Questions
-- [ ] IP: personal or Witivio-owned? (gates OSS publish — R-010)
-- [ ] One instance per client confirmed (D-011)?
-- [ ] Does ITER's DPO accept the app's data store/region (D-010)?
+- [ ] Installs on a fresh tenant in **< 20 min** (web app + 1 app reg + ARG; no Dataverse import)
+- [ ] **One ARG query** renders every agent across the tenant with owner + env + sharing
+- [ ] **Default-env migration tracker** shows owners + persists migration state (ITER worklist)
+- [ ] A simulated cost/credit spike fires a **Teams + email alert** within one ingest cycle
+- [ ] **Compliance score** + violations render; risky patterns (anonymous, maker-cred, autonomous) flagged
+- [ ] **Maturity report** distinguishes auto-derived vs manual-attestation evidence (partial-capped)
+- [ ] A **release gate** blocks an unready agent with reasons + a signed decision record
+- [ ] Validated end-to-end **in the MVP tenant**; deployable to a client by granting permissions
+- [ ] Published **open-source** (MIT, IP cleared) → MVP OSS contribution logged; **10-min demo** recorded
+- [ ] Honest labelling throughout (estimated cost; partial-capped maturity; aggregate-only transcripts)
