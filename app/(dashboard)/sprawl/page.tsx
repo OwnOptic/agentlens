@@ -4,9 +4,6 @@ import React, { useState, useMemo } from 'react';
 import type { Environment, MigrationStatus } from '@/lib/types';
 import { mockEnvironments, mockAgents, mockCapacity } from '@/lib/mock/seed';
 
-export const metadata = {
-  title: 'Environment Sprawl',
-};
 
 interface EnvironmentSprawlCard {
   environment: Environment;

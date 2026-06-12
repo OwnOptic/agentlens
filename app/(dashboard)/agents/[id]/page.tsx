@@ -12,9 +12,6 @@ import {
   mockViolations,
 } from '@/lib/mock/seed';
 
-export const metadata = {
-  title: 'Agent Detail',
-};
 
 type TabType = 'overview' | 'knowledge' | 'credits' | 'compliance' | 'analytics';
 

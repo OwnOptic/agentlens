@@ -3,9 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import type { HealthMetric } from '@/lib/types';
 
-export const metadata = {
-  title: 'AgentLens - Health',
-};
 
 interface AgentHealthSummary {
   botId: string;

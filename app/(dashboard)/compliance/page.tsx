@@ -352,9 +352,6 @@ function AgentScoreTable({ scores }: { scores: AgentComplianceScore[] }) {
 // Page
 // ---------------------------------------------------------------------------
 
-export const metadata = {
-  title: 'AgentLens - Compliance',
-};
 
 export default function CompliancePage() {
   // Merge default rule pack with seed rules (seed has 6; pack has 9 - union by ID)

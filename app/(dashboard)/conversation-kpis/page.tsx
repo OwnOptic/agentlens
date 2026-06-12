@@ -3,9 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import type { ConversationKpi } from '@/lib/types';
 
-export const metadata = {
-  title: 'AgentLens - Conversation KPIs',
-};
 
 interface ChartDataPoint {
   date: string;

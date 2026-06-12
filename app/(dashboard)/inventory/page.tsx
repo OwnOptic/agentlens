@@ -5,9 +5,6 @@ import Link from 'next/link';
 import type { Agent, Environment } from '@/lib/types';
 import { mockAgents, mockEnvironments, mockCapacity, mockMetrics } from '@/lib/mock/seed';
 
-export const metadata = {
-  title: 'Agent Inventory',
-};
 
 type SortField = 'name' | 'env' | 'owner' | 'state' | 'lifecycle' | 'created' | 'activity';
 type SortDirection = 'asc' | 'desc';

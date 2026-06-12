@@ -117,9 +117,6 @@ function StatBar({ rows }: { rows: AgentPatternResult[] }) {
 // Page
 // ---------------------------------------------------------------------------
 
-export const metadata = {
-  title: 'AgentLens - Risky Patterns',
-};
 
 export default function RiskyPatternsPage() {
   const [lifecycleFilter, setLifecycleFilter] = useState<string>('all');
