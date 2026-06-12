@@ -1,280 +1,154 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import type { ConversationKpi } from '@/lib/types';
+/**
+ * Conversation KPIs - REAL intent + sentiment signals derived from Dataverse
+ * conversationtranscript content (LLM classifier + lexicon fallback), aggregated
+ * per agent. PII-safe: only counts, never raw text. Honest-empty when not connected.
+ */
 
+import { useEffect, useState } from 'react';
+import {
+  MessagesSquare, RefreshCw, ThumbsUp, CheckCircle2, PhoneForwarded, Frown, Heart, Activity, AlertTriangle, Loader2,
+} from 'lucide-react';
+import { Card, Badge, StatCard, PageHeader, SectionTitle, Button } from '@/components/ui';
 
-interface ChartDataPoint {
-  date: string;
-  sessions: number;
-  deflectionRate: number;
+interface AgentSignals {
+  botId: string;
+  conversations: number;
+  resolutionRate: number;
   escalationRate: number;
+  frustrationRate: number;
+  gratitudeRate: number;
+  abandonmentRate: number;
+  avgSentiment: number;
+  csatProxy: number;
+  classifier: 'llm' | 'lexicon' | 'mixed';
+}
+interface IntelResult {
+  fetchedAt: string;
+  source: 'dataverse' | 'none';
+  envCount: number;
+  transcriptCount: number;
+  agents: AgentSignals[];
+  note?: string;
+  error?: string;
 }
 
-function ConversationKpisPage() {
-  const [kpis, setKpis] = useState<ConversationKpi[]>([]);
+function avg(xs: number[]): number {
+  return xs.length ? parseFloat((xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1)) : 0;
+}
+
+export default function ConversationKpisPage() {
+  const [data, setData] = useState<IntelResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Aggregate data by date for trend analysis
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-
-  useEffect(() => {
-    const fetchKpis = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/kpis');
-        if (!response.ok) {
-          throw new Error('Failed to fetch KPIs');
-        }
-        const data: ConversationKpi[] = await response.json();
-        setKpis(data);
-
-        // Aggregate by date for trend charts
-        const aggregates: Record<string, ChartDataPoint> = {};
-        data.forEach((kpi) => {
-          if (!aggregates[kpi.date]) {
-            aggregates[kpi.date] = {
-              date: kpi.date,
-              sessions: 0,
-              deflectionRate: 0,
-              escalationRate: 0,
-            };
-          }
-          aggregates[kpi.date].sessions += kpi.sessions;
-          // Average the rates
-          const currentCnt = aggregates[kpi.date];
-          currentCnt.deflectionRate =
-            (currentCnt.deflectionRate + kpi.deflectionRate) / 2;
-          currentCnt.escalationRate =
-            (currentCnt.escalationRate + kpi.escalationRate) / 2;
-        });
-
-        const sortedChart = Object.values(aggregates).sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-        );
-        setChartData(sortedChart);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchKpis();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-white mb-4">Conversation KPIs</h1>
-        <p className="text-slate-400">Loading...</p>
-      </div>
-    );
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/conversation-intel', { cache: 'no-store' });
+      setData(await res.json());
+    } finally {
+      setLoading(false);
+    }
   }
+  useEffect(() => { load(); }, []);
 
-  if (error) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-white mb-4">Conversation KPIs</h1>
-        <p className="text-red-400">Error: {error}</p>
-      </div>
-    );
-  }
-
-  // Calculate aggregate metrics
-  const totalSessions = kpis.reduce((sum, k) => sum + k.sessions, 0);
-  const avgDeflection =
-    kpis.length > 0
-      ? (kpis.reduce((sum, k) => sum + k.deflectionRate, 0) / kpis.length * 100).toFixed(1)
-      : '0';
-  const avgEscalation =
-    kpis.length > 0
-      ? (kpis.reduce((sum, k) => sum + k.escalationRate, 0) / kpis.length * 100).toFixed(1)
-      : '0';
+  const agents = data?.agents ?? [];
+  const connected = data?.source === 'dataverse' && agents.length > 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Conversation KPIs</h1>
-        <p className="text-slate-400">
-          Aggregate conversation health metrics: volume, deflection, escalation.
-          <br />
-          Data is aggregated across all agents - no conversation content or user identifiers included.
-        </p>
-      </div>
+    <div className="p-8">
+      <PageHeader
+        icon={MessagesSquare}
+        tone="sky"
+        title="Conversation KPIs"
+        subtitle="Intent + sentiment from real conversation transcripts - gratitude, resolution, escalation, frustration - analyzed per agent (LLM classifier, PII-safe aggregate-only)."
+        badge={connected ? <Badge variant="success" dot>live transcripts</Badge> : <Badge variant="neutral">not connected</Badge>}
+        actions={<Button icon={RefreshCw} onClick={load}>Refresh</Button>}
+      />
 
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Total Sessions</div>
-          <div className="text-3xl font-bold text-emerald-400">{totalSessions}</div>
-          <div className="text-xs text-slate-500 mt-2">Across all agents, all dates</div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Avg Deflection Rate</div>
-          <div className="text-3xl font-bold text-blue-400">{avgDeflection}%</div>
-          <div className="text-xs text-slate-500 mt-2">Sessions resolved without escalation</div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Avg Escalation Rate</div>
-          <div className="text-3xl font-bold text-amber-400">{avgEscalation}%</div>
-          <div className="text-xs text-slate-500 mt-2">Sessions escalated to human agent</div>
-        </div>
-      </div>
-
-      {/* Trend Charts (ASCII-based fallback for demonstration) */}
-      <div className="space-y-8 mb-8">
-        {/* Volume Trend */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Session Volume Trend</h2>
-          <div className="overflow-x-auto">
-            <div className="min-w-max">
-              {chartData.length > 0 ? (
-                <div>
-                  {/* Simple bar chart visualization */}
-                  {chartData.map((point) => {
-                    const maxSessions = Math.max(
-                      ...chartData.map((d) => d.sessions)
-                    );
-                    const barWidth =
-                      maxSessions > 0
-                        ? Math.ceil((point.sessions / maxSessions) * 40)
-                        : 0;
-                    return (
-                      <div key={point.date} className="flex items-center gap-3 mb-3">
-                        <div className="w-20 text-sm text-slate-400">{point.date}</div>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="h-6 bg-emerald-600 rounded"
-                            style={{ width: `${barWidth * 8}px` }}
-                          />
-                          <span className="text-sm text-slate-300 ml-2">
-                            {point.sessions}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-slate-400">No data available</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Deflection Rate Trend */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Deflection Rate Trend</h2>
-          <div className="overflow-x-auto">
-            <div className="min-w-max">
-              {chartData.length > 0 ? (
-                <div>
-                  {chartData.map((point) => (
-                    <div key={`def-${point.date}`} className="flex items-center gap-3 mb-3">
-                      <div className="w-20 text-sm text-slate-400">{point.date}</div>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="h-6 bg-blue-600 rounded"
-                          style={{
-                            width: `${point.deflectionRate * 40}px`,
-                          }}
-                        />
-                        <span className="text-sm text-slate-300 ml-2">
-                          {(point.deflectionRate * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-400">No data available</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Escalation Rate Trend */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Escalation Rate Trend</h2>
-          <div className="overflow-x-auto">
-            <div className="min-w-max">
-              {chartData.length > 0 ? (
-                <div>
-                  {chartData.map((point) => (
-                    <div key={`esc-${point.date}`} className="flex items-center gap-3 mb-3">
-                      <div className="w-20 text-sm text-slate-400">{point.date}</div>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="h-6 bg-amber-600 rounded"
-                          style={{
-                            width: `${point.escalationRate * 40}px`,
-                          }}
-                        />
-                        <span className="text-sm text-slate-300 ml-2">
-                          {(point.escalationRate * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-400">No data available</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Raw Data Table (if available) */}
-      {kpis.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Raw Data by Agent & Date</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="text-left py-2 px-3 text-slate-300 font-medium">Date</th>
-                  <th className="text-left py-2 px-3 text-slate-300 font-medium">Bot</th>
-                  <th className="text-right py-2 px-3 text-slate-300 font-medium">Sessions</th>
-                  <th className="text-right py-2 px-3 text-slate-300 font-medium">
-                    Deflection Rate
-                  </th>
-                  <th className="text-right py-2 px-3 text-slate-300 font-medium">
-                    Escalation Rate
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {kpis.map((kpi) => (
-                  <tr key={`${kpi.envId}/${kpi.botId}/${kpi.date}`} className="border-b border-slate-800">
-                    <td className="py-2 px-3 text-slate-400">{kpi.date}</td>
-                    <td className="py-2 px-3 text-slate-400">{kpi.botId}</td>
-                    <td className="py-2 px-3 text-slate-300 text-right">{kpi.sessions}</td>
-                    <td className="py-2 px-3 text-slate-300 text-right">
-                      {(kpi.deflectionRate * 100).toFixed(1)}%
-                    </td>
-                    <td className="py-2 px-3 text-slate-300 text-right">
-                      {(kpi.escalationRate * 100).toFixed(1)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin text-sky-400" /> Analyzing transcripts...
         </div>
       )}
 
-      {kpis.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-slate-400">No KPI data available yet.</p>
+      {!loading && !connected && (
+        <Card className="p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+            <div>
+              <p className="font-semibold text-amber-300">Conversation intelligence not connected</p>
+              <p className="mt-1 text-sm text-slate-400">
+                {data?.note ?? 'Add the service-principal env vars and an environment with transcripts.'}
+              </p>
+              <pre className="mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">{`AZURE_CLIENT_ID / AZURE_CLIENT_SECRET / AZURE_TENANT_ID   # Dataverse access
+AGENTLENS_ORG_URLS=https://orgXXXX.crm.dynamics.com       # envs to scan
+AZURE_OPENAI_API_KEY=...                                  # LLM classifier (else lexicon)`}</pre>
+              <p className="mt-2 text-xs text-slate-500">No fake numbers shown - this page is real or honestly empty.</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {!loading && connected && (
+        <div className="space-y-8">
+          <p className="text-xs text-slate-500">
+            {data!.transcriptCount.toLocaleString()} transcripts across {data!.envCount} env(s) ·{' '}
+            classifier: <span className="text-slate-300">{agents[0]?.classifier ?? 'lexicon'}</span> ·{' '}
+            <span suppressHydrationWarning>{new Date(data!.fetchedAt).toLocaleString()}</span>
+          </p>
+
+          {/* Tenant rollup */}
+          <section>
+            <SectionTitle icon={Activity}>Tenant rollup</SectionTitle>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <StatCard icon={Heart} label="Avg CSAT proxy" value={`${avg(agents.map((a) => a.csatProxy))}`} tone="emerald" />
+              <StatCard icon={CheckCircle2} label="Resolution rate" value={`${avg(agents.map((a) => a.resolutionRate))}%`} tone="emerald" />
+              <StatCard icon={ThumbsUp} label="Gratitude rate" value={`${avg(agents.map((a) => a.gratitudeRate))}%`} tone="sky" />
+              <StatCard icon={PhoneForwarded} label="Escalation rate" value={`${avg(agents.map((a) => a.escalationRate))}%`} tone="amber" />
+              <StatCard icon={Frown} label="Frustration rate" value={`${avg(agents.map((a) => a.frustrationRate))}%`} tone="red" />
+            </div>
+          </section>
+
+          {/* Per-agent */}
+          <section>
+            <SectionTitle icon={MessagesSquare}>Per agent ({agents.length})</SectionTitle>
+            <Card>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wider text-slate-500">
+                      <th className="px-4 py-3">Agent</th>
+                      <th className="px-4 py-3">Convos</th>
+                      <th className="px-4 py-3">CSAT</th>
+                      <th className="px-4 py-3">Resolved</th>
+                      <th className="px-4 py-3">Gratitude</th>
+                      <th className="px-4 py-3">Escalated</th>
+                      <th className="px-4 py-3">Frustrated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agents.map((a) => (
+                      <tr key={a.botId} className="border-b border-slate-800/60 last:border-0 hover:bg-slate-800/30">
+                        <td className="px-4 py-3 font-mono text-xs text-slate-300">{a.botId}</td>
+                        <td className="px-4 py-3 text-slate-400">{a.conversations}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant={a.csatProxy >= 70 ? 'success' : a.csatProxy >= 45 ? 'warning' : 'critical'}>{a.csatProxy}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-emerald-400">{a.resolutionRate}%</td>
+                        <td className="px-4 py-3 text-sky-400">{a.gratitudeRate}%</td>
+                        <td className="px-4 py-3 text-amber-400">{a.escalationRate}%</td>
+                        <td className="px-4 py-3 text-red-400">{a.frustrationRate}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </section>
         </div>
       )}
     </div>
   );
 }
-
-export default ConversationKpisPage;

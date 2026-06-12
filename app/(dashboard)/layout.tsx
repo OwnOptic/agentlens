@@ -144,7 +144,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 }
 
 // Routes that show REAL tenant data - everything else is demo seed data.
-const REAL_DATA_ROUTES = ['/live', '/discovery', '/ask'];
+const REAL_DATA_ROUTES = ['/live', '/discovery', '/ask', '/conversation-kpis'];
 
 function DemoBanner() {
   return (
