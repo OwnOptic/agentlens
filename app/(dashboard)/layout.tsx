@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  ScanEye, Radio, Radar, LayoutDashboard, Boxes, Network, DollarSign, Bell,
+  ScanEye, Radar, LayoutDashboard, Boxes, Network, DollarSign, Bell,
   MessagesSquare, HeartPulse, ShieldCheck, AlertTriangle, Gauge, DoorClosed,
   Workflow, UserCog, Sparkles, Settings, ChevronLeft, type LucideIcon,
 } from 'lucide-react';
@@ -17,9 +17,8 @@ const NAV_GROUPS: { label: string; items: NavItemT[] }[] = [
   {
     label: 'Monitor',
     items: [
-      { label: 'Live (MVP)',        href: '/live',              icon: Radio },
-      { label: 'Agent Discovery',   href: '/discovery',         icon: Radar },
       { label: 'Overview',          href: '/',                  icon: LayoutDashboard },
+      { label: 'Agent Discovery',   href: '/discovery',         icon: Radar },
       { label: 'Inventory',         href: '/inventory',         icon: Boxes },
       { label: 'Sprawl',            href: '/sprawl',            icon: Network },
       { label: 'Cost',              href: '/cost',              icon: DollarSign },
@@ -144,7 +143,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 }
 
 // Routes that show REAL tenant data - everything else is demo seed data.
-const REAL_DATA_ROUTES = ['/live', '/discovery', '/ask', '/conversation-kpis'];
+const REAL_DATA_ROUTES = ['/', '/discovery', '/ask', '/conversation-kpis'];
 
 function DemoBanner() {
   return (

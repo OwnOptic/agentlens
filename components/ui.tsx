@@ -129,3 +129,34 @@ export function Button({
   if (href) return <a href={href} className={cls} {...rest}>{inner}</a>;
   return <button onClick={onClick} className={cls}>{inner}</button>;
 }
+
+/* InfoTip - info bubble with a hover tooltip ----------------------- */
+export function InfoTip({ children, label }: { children: React.ReactNode; label?: string }) {
+  return (
+    <span className="group relative inline-flex items-center align-middle">
+      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 cursor-help text-slate-500 hover:text-slate-300" fill="currentColor" aria-label={label ?? 'info'}>
+        <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 10.5a.75.75 0 01-1.5 0V7.5a.75.75 0 011.5 0v4zM8 6a1 1 0 110-2 1 1 0 010 2z" />
+      </svg>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-slate-300 shadow-xl group-hover:block">
+        {children}
+        <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-slate-700 bg-slate-900" />
+      </span>
+    </span>
+  );
+}
+
+/* DataSourceBadge - provenance: where this data comes from + state - */
+export type DataState = 'live' | 'demo' | 'not_connected';
+export function DataSourceBadge({ state, source }: { state: DataState; source: string }) {
+  const map: Record<DataState, { variant: BadgeVariant; dot: boolean; label: string }> = {
+    live:          { variant: 'success', dot: true,  label: 'Live' },
+    demo:          { variant: 'warning', dot: false, label: 'Demo data' },
+    not_connected: { variant: 'neutral', dot: false, label: 'Not connected' },
+  };
+  const m = map[state];
+  return (
+    <Badge variant={m.variant} dot={m.dot}>
+      {m.label} · {source}
+    </Badge>
+  );
+}
