@@ -11,6 +11,7 @@ const NAV_GROUPS = [
   {
     label: 'Monitor',
     items: [
+      { label: 'Live (MVP)',        href: '/live' },
       { label: 'Overview',          href: '/' },
       { label: 'Inventory',         href: '/inventory' },
       { label: 'Sprawl',            href: '/sprawl' },
