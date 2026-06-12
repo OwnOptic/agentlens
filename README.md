@@ -1,57 +1,81 @@
 # AgentLens v2
 
-**Single-tenant Copilot agent governance and observability platform — powered by Azure Resource Graph.**
+**A standalone, install-light governance & observability webapp for Microsoft Copilot Studio agents.**
 
-AgentLens surfaces all Copilot Studio agents across your entire Power Platform estate in one unified dashboard. Track credit cost, capacity, compliance, maturity, and health — with intelligent alerting, release gates, and policy-as-code controls.
+AgentLens surfaces every Copilot Studio agent across a Power Platform tenant in one dashboard - inventory, cost, capacity, compliance, maturity, health - with proactive alerting, policy-as-code release gates, and an AI assistant grounded on your real tenant data. It runs as a Next.js web app (not a Power Platform solution), reads through **one Entra app registration**, and installs in minutes with no Dataverse import into your environments.
 
-## What is AgentLens?
+> Status: **v2 beta.** The full surface is built and runs on realistic demo data; the **Live (MVP)** page and **Ask AI** answer over **real tenant data** via Azure Resource Graph. See [Data sources](#data-sources--honesty).
 
-- **Complete agent inventory** - Every Copilot Studio agent across all environments, via Azure Resource Graph
-- **Credit and capacity analytics** - Per-feature cost breakdown, capacity tracking, overage detection
-- **Proactive alerting** - Budget breaches, volume spikes, compliance violations, risky patterns
-- **Compliance engine** - Configurable rules, violation tracking, risk-pattern detection
-- **Maturity assessment** - 0-4 scoring across security, management, and reporting pillars
-- **Release gates with policy-as-code** - YAML-based policies, signed decisions, audit trail
-- **Conversation KPIs and health** - Deflection rates, latency, error tracking via App Insights
-- **Single-tenant** - One app instance per Entra tenant; installs in <5 minutes
+---
 
-## Quick Start
+## Why AgentLens
 
-See [docs/INSTALL.md](docs/INSTALL.md) for the full 4-step installation guide.
+| | AgentLens | Copilot Studio Kit | Native PPAC / Agent 365 |
+|---|---|---|---|
+| Form | Standalone web app | Dataverse managed solution | Microsoft admin surfaces |
+| Install | 1 app reg + ARG read | 45 MB solution + deps + Code Apps + connections | Built-in |
+| Proactive **alerting** (Teams/email) | ✅ | ❌ | ❌ |
+| **Migration tracker** (default-env sprawl) | ✅ | ❌ | partial |
+| **Policy-as-code** release gates | ✅ | ❌ | ❌ |
+| Honest **maturity** assessment | ✅ | ❌ | ❌ |
+| **Ask AI** over your tenant | ✅ | ❌ | ❌ |
 
-**TL;DR:**
-1. Deploy the web app (`npm install && npm run build && npm start`)
-2. Create an Entra app registration with ARG read permission
-3. Run the optional provision script (sets up legacy deep-scan if needed)
-4. Set environment variables and launch
+The durable wedge is the **standalone form + proactive + stateful** pieces the in-platform tools don't combine.
 
-For architecture details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## Features (15 pages)
 
-## How It Works
+**Monitor** — Live (MVP, real ARG data) · Overview (exec dashboard) · Inventory · Sprawl + Migration tracker · Cost + Capacity · Alerts · Conversation KPIs · Health
+**Govern** — Compliance (rules + violations + score) · Risky Patterns · Maturity (0-4, partial-capped) · Release Gates (policy-as-code, signed decisions)
+**Tools** — Lifecycle · Maker View · **Ask (AI)** · Settings
 
-**Backbone:** Azure Resource Graph (`PowerPlatformResources` queries) provides whole-tenant agent inventory in a single call — no per-environment polling, no Dataverse import.
+## Architecture
 
-**Cost & Capacity:** PPAC Licensing API for per-agent credit metrics, with CSV fallback and feature breakdown (generative answers, agent actions, flows, text tools).
+- **Inventory backbone — Azure Resource Graph.** One `PowerPlatformResources` query returns the whole tenant's agents with owner, environment, sharing, model, auth, channels, and connector counts. No per-environment fan-out, no per-env app user. (Verified live against a real tenant.)
+- **Cost — PPAC Licensing API** (+ CSV fallback). *Deferred in this build; Cost page is estimate-only.*
+- **Store — Supabase (Postgres)** for history, baselines, migration state, violations, and gate decisions.
+- **Ask AI — Azure OpenAI** (secret-key), grounded on live ARG data.
+- **Auth — one Entra service principal** with Power Platform Admin role + admin-consented Graph; app login via Entra SSO.
 
-**Governance Stack:** Configurable compliance rules, risky-pattern detection, maturity scoring (0-4 across 3 pillars), and policy-as-code release gates with signed audit records.
+See [docs/PLAN.md](docs/PLAN.md) for the full design, phases, decisions, and risks.
 
-**Alerts & KPIs:** Proactive Teams/email notifications for budget, spikes, overage, compliance. Conversation KPI aggregates and App Insights health metrics (no message content).
+## Quick start
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
+```bash
+npm install
+cp .env.example .env.local      # then fill in the values below
+npm run dev                     # http://localhost:3000
+```
 
-## Configuration
+The app runs out of the box on **demo data**. To light up the live + AI features, set the env vars below.
 
-All configuration happens in the **Settings > Setup Wizard** page. The wizard guides you through:
-1. Tenant ID (Entra tenant)
-2. Client ID (app registration)
-3. Teams webhook URL (for alerts, optional)
-4. Custom thresholds (budget, escalation)
+## Configuration (`.env.local`)
 
-**Environment variables** are minimally required; most settings are managed in-app. See [docs/INSTALL.md](docs/INSTALL.md#step-4-environment-variables) for the full list.
+| Variable | Purpose | Needed for |
+|---|---|---|
+| `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | App data store | persistence |
+| `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | Service principal (ARG/Graph) | live inventory in prod |
+| `MVP_ARM_TOKEN` | A management.azure.com token (dev shortcut for the Live page) | Live (MVP) page |
+| **`AZURE_OPENAI_ENDPOINT`** | `https://<resource>.openai.azure.com` | **Ask AI** |
+| **`AZURE_OPENAI_API_KEY`** | Azure OpenAI **secret key** | **Ask AI** |
+| **`AZURE_OPENAI_DEPLOYMENT`** | chat deployment (e.g. `gpt-4o`) | **Ask AI** |
+| `AZURE_OPENAI_API_VERSION` | API version (default `2024-08-01-preview`) | Ask AI |
+| `CRON_SECRET` | guards `/api/ingest` | scheduled ingestion |
+| `TEAMS_WEBHOOK_URL` | alert delivery | alerts |
 
-## Support
+### Ask AI (Azure OpenAI)
 
-For issues or questions:
-- Check the [GitHub Issues](https://github.com/your-org/agentlens/issues)
-- Review the [Install Guide](docs/INSTALL.md) for troubleshooting
-- Contact your Copilot/AI leadership
+The **Ask (AI)** page sends your question to `/api/ask`, which fetches **real tenant data** (Azure Resource Graph) as grounding context and asks **Azure OpenAI** to answer - using only that data, no hallucinated agents or numbers. Auth is **secret-key** (`api-key` header). To enable it, paste your Azure OpenAI endpoint, key, and deployment name into `.env.local`. Without them, the page shows a "configure Azure OpenAI" message.
+
+## Data sources & honesty
+
+- **Live (MVP)** and **Ask AI** → real tenant data via Azure Resource Graph.
+- **All other pages** → realistic demo seed data (clearly the case until connectors are pointed at your tenant).
+- Cost is labelled **estimated** (live licensing deferred). Maturity auto-scoring is **partial-capped** (telemetry never asserts full compliance). Conversation KPIs are **aggregate-only** (no message content).
+
+## Tech
+
+Next.js 14 (App Router) · TypeScript (strict) · Tailwind CSS · Zustand · Recharts · lucide-react · Supabase · `@azure/msal-node` · Azure OpenAI.
+
+## License
+
+Private (pending IP-ownership clearance). Not yet open-source.

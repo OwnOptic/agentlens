@@ -1,40 +1,110 @@
 /**
- * POST /api/ask
+ * POST /api/ask  - AgentLens "Ask AI"
  *
- * Accepts a natural-language question, translates it to read-only SQL
- * constrained to the allowlisted schema, executes it against the mock seed
- * (or Supabase in production), and returns a NlQueryResult.
+ * Answers a natural-language question about the tenant's Copilot agent
+ * governance posture, grounded on REAL live tenant data (Azure Resource Graph),
+ * using Azure OpenAI (secret-key auth). No mock data.
  */
 
 import { NextResponse } from 'next/server';
-import { runNlQuery } from '@/lib/ai/nlQuery';
-import type { NlQueryRequest, NlQueryResult } from '@/lib/ai/nlQuery';
+import { azureChat, getAzureConfig } from '@/lib/ai/azureOpenAI';
+
+export const dynamic = 'force-dynamic';
+
+const ARG_ENDPOINT =
+  'https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01';
+
+async function arg(token: string, query: string): Promise<unknown[]> {
+  const res = await fetch(ARG_ENDPOINT, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, options: { resultFormat: 'objectArray' } }),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`ARG ${res.status}`);
+  return (await res.json()).data ?? [];
+}
+
+/** Build a grounding context from REAL tenant data (ARG). */
+async function buildLiveContext(): Promise<{ context: string; live: boolean }> {
+  const token = process.env.MVP_ARM_TOKEN;
+  if (!token) return { context: 'No live tenant connection configured.', live: false };
+  try {
+    const [summary, environments, agents] = await Promise.all([
+      arg(token, 'PowerPlatformResources | summarize c=count() by type | order by c desc'),
+      arg(
+        token,
+        "PowerPlatformResources | where type == 'microsoft.powerplatform/environments' | project name, properties | limit 50",
+      ),
+      arg(
+        token,
+        "PowerPlatformResources | where type == 'microsoft.copilotstudio/agents' | project name, properties | limit 200",
+      ),
+    ]);
+    const context = JSON.stringify(
+      {
+        resourceCounts: summary,
+        environmentCount: environments.length,
+        environments: environments.map((e) => {
+          const env = e as { name: string; properties: Record<string, unknown> };
+          return {
+            id: env.name,
+            displayName: env.properties?.displayName,
+            type: env.properties?.environmentType,
+            isDefault: env.properties?.isDefault,
+          };
+        }),
+        copilotStudioAgentCount: agents.length,
+        agents,
+      },
+      null,
+      0,
+    );
+    return { context, live: true };
+  } catch (e) {
+    return { context: `Live query failed: ${e instanceof Error ? e.message : String(e)}`, live: false };
+  }
+}
+
+const SYSTEM_PROMPT = `You are AgentLens, an AI assistant for Microsoft Copilot Studio agent governance.
+Answer the user's question using ONLY the real tenant data provided below (JSON from Azure Resource Graph).
+Be concise, specific, and cite numbers from the data. If the data does not contain the answer, say so plainly
+and suggest what to check. Never invent agents, environments, or numbers that are not in the data.`;
 
 export async function POST(request: Request): Promise<NextResponse> {
-  let body: Partial<NlQueryRequest>;
+  if (!getAzureConfig()) {
+    return NextResponse.json(
+      {
+        error: 'Azure OpenAI not configured',
+        hint: 'Add AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY and AZURE_OPENAI_DEPLOYMENT to .env.local',
+      },
+      { status: 503 },
+    );
+  }
+
+  let question = '';
+  try {
+    const body = (await request.json()) as { question?: string };
+    question = (body.question ?? '').trim();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  if (!question) return NextResponse.json({ error: 'question is required' }, { status: 400 });
 
   try {
-    body = (await request.json()) as Partial<NlQueryRequest>;
-  } catch {
-    return NextResponse.json<NlQueryResult>(
-      { sql: '', columns: [], rows: [], isMock: true, error: 'Invalid JSON body' },
-      { status: 400 }
+    const { context, live } = await buildLiveContext();
+    const answer = await azureChat(
+      [
+        { role: 'system', content: `${SYSTEM_PROMPT}\n\nTENANT DATA:\n${context}` },
+        { role: 'user', content: question },
+      ],
+      { temperature: 0.2, maxTokens: 700 },
+    );
+    return NextResponse.json({ answer, grounded: live, dataSource: live ? 'live-arg' : 'none' });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : String(e), hint: 'Check the Azure OpenAI deployment + key.' },
+      { status: 502 },
     );
   }
-
-  const question = typeof body.question === 'string' ? body.question.trim() : '';
-
-  if (!question) {
-    return NextResponse.json<NlQueryResult>(
-      { sql: '', columns: [], rows: [], isMock: true, error: 'question is required' },
-      { status: 400 }
-    );
-  }
-
-  const maxRows = typeof body.maxRows === 'number' ? body.maxRows : 50;
-
-  const result = await runNlQuery({ question, maxRows });
-
-  const status = result.error ? 500 : 200;
-  return NextResponse.json<NlQueryResult>(result, { status });
 }

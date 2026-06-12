@@ -3,158 +3,154 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  ScanEye, Radio, Radar, LayoutDashboard, Boxes, Network, DollarSign, Bell,
+  MessagesSquare, HeartPulse, ShieldCheck, AlertTriangle, Gauge, DoorClosed,
+  Workflow, UserCog, Sparkles, Settings, ChevronLeft, type LucideIcon,
+} from 'lucide-react';
 
 // ---------------------------------------------------------------------------
-// Nav structure
+// Nav structure (with icons)
 // ---------------------------------------------------------------------------
-const NAV_GROUPS = [
+type NavItemT = { label: string; href: string; icon: LucideIcon };
+const NAV_GROUPS: { label: string; items: NavItemT[] }[] = [
   {
     label: 'Monitor',
     items: [
-      { label: 'Live (MVP)',        href: '/live' },
-      { label: 'Overview',          href: '/' },
-      { label: 'Inventory',         href: '/inventory' },
-      { label: 'Sprawl',            href: '/sprawl' },
-      { label: 'Cost',              href: '/cost' },
-      { label: 'Alerts',            href: '/alerts' },
-      { label: 'Conversation KPIs', href: '/conversation-kpis' },
-      { label: 'Health',            href: '/health' },
+      { label: 'Live (MVP)',        href: '/live',              icon: Radio },
+      { label: 'Agent Discovery',   href: '/discovery',         icon: Radar },
+      { label: 'Overview',          href: '/',                  icon: LayoutDashboard },
+      { label: 'Inventory',         href: '/inventory',         icon: Boxes },
+      { label: 'Sprawl',            href: '/sprawl',            icon: Network },
+      { label: 'Cost',              href: '/cost',              icon: DollarSign },
+      { label: 'Alerts',            href: '/alerts',            icon: Bell },
+      { label: 'Conversation KPIs', href: '/conversation-kpis', icon: MessagesSquare },
+      { label: 'Health',            href: '/health',            icon: HeartPulse },
     ],
   },
   {
     label: 'Govern',
     items: [
-      { label: 'Compliance',      href: '/compliance' },
-      { label: 'Risky Patterns',  href: '/risky-patterns' },
-      { label: 'Maturity',        href: '/maturity' },
-      { label: 'Release Gates',   href: '/release-gates' },
+      { label: 'Compliance',     href: '/compliance',     icon: ShieldCheck },
+      { label: 'Risky Patterns', href: '/risky-patterns', icon: AlertTriangle },
+      { label: 'Maturity',       href: '/maturity',       icon: Gauge },
+      { label: 'Release Gates',  href: '/release-gates',  icon: DoorClosed },
     ],
   },
   {
     label: 'Tools',
     items: [
-      { label: 'Lifecycle',   href: '/lifecycle' },
-      { label: 'Maker View',  href: '/maker-view' },
-      { label: 'Ask (AI)',    href: '/ask' },
-      { label: 'Settings',    href: '/settings' },
+      { label: 'Lifecycle',  href: '/lifecycle',  icon: Workflow },
+      { label: 'Maker View', href: '/maker-view', icon: UserCog },
+      { label: 'Ask (AI)',   href: '/ask',        icon: Sparkles },
+      { label: 'Settings',   href: '/settings',   icon: Settings },
     ],
   },
 ];
 
-// ---------------------------------------------------------------------------
-// NavItem
-// ---------------------------------------------------------------------------
-function NavItem({ label, href }: { label: string; href: string }) {
+function NavItem({ item, collapsed }: { item: NavItemT; collapsed: boolean }) {
   const pathname = usePathname();
-  const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
-
+  const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+  const Icon = item.icon;
   return (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     <Link
-      href={href as any}
+      href={item.href as any}
+      title={collapsed ? item.label : undefined}
       className={[
-        'block rounded-md px-3 py-1.5 text-sm transition-colors',
+        'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+        collapsed ? 'justify-center px-0' : '',
         isActive
-          ? 'bg-emerald-900/60 text-emerald-300 font-medium'
-          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+          ? 'bg-emerald-500/10 text-emerald-300 font-medium'
+          : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200',
       ].join(' ')}
     >
-      {label}
+      {isActive && !collapsed && (
+        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-emerald-400" />
+      )}
+      <Icon
+        className={['h-[18px] w-[18px] shrink-0', isActive ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-300'].join(' ')}
+        strokeWidth={2}
+      />
+      {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sidebar
-// ---------------------------------------------------------------------------
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   return (
     <aside
       className={[
-        'flex flex-col border-r border-slate-800 bg-slate-900 transition-all duration-200',
-        collapsed ? 'w-14' : 'w-56',
+        'flex flex-col border-r border-slate-800/80 bg-slate-900/70 backdrop-blur transition-all duration-200',
+        collapsed ? 'w-16' : 'w-60',
       ].join(' ')}
     >
-      {/* Logo / brand bar */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 px-4">
+      {/* Brand */}
+      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-800/80 px-4">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/30">
+          <ScanEye className="h-5 w-5 text-emerald-400" strokeWidth={2} />
+        </div>
         {!collapsed && (
-          <span className="text-lg font-bold tracking-tight text-emerald-400">AgentLens</span>
+          <div className="leading-tight">
+            <p className="text-sm font-bold tracking-tight text-slate-100">AgentLens</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">Agent Governance</p>
+          </div>
         )}
         <button
           onClick={onToggle}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="ml-auto rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+          className="ml-auto rounded-md p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
         >
-          {/* Simple chevron icon via SVG */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className={['h-4 w-4 transition-transform', collapsed ? 'rotate-180' : ''].join(' ')}
-          >
-            <path
-              fillRule="evenodd"
-              d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
+          <ChevronLeft className={['h-4 w-4 transition-transform', collapsed ? 'rotate-180' : ''].join(' ')} />
         </button>
       </div>
 
-      {/* Nav groups */}
-      <nav className="flex-1 overflow-y-auto px-2 py-4">
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto px-2.5 py-4">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="mb-5">
             {!collapsed && (
-              <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-widest text-slate-600">
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
                 {group.label}
               </p>
             )}
             <ul className="space-y-0.5">
-              {group.items.map((item) =>
-                collapsed ? (
-                  // Collapsed: show dot only, full label in title tooltip
-                  <li key={item.href}>
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    <Link
-                      href={item.href as any}
-                      title={item.label}
-                      className="flex h-8 w-full items-center justify-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-300"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                    </Link>
-                  </li>
-                ) : (
-                  <li key={item.href}>
-                    <NavItem label={item.label} href={item.href} />
-                  </li>
-                )
-              )}
+              {group.items.map((item) => (
+                <li key={item.href}>
+                  <NavItem item={item} collapsed={collapsed} />
+                </li>
+              ))}
             </ul>
           </div>
         ))}
       </nav>
 
       {/* Footer */}
-      {!collapsed && (
-        <div className="shrink-0 border-t border-slate-800 px-4 py-3">
-          <p className="text-xs text-slate-600">v2.0.0-beta</p>
-        </div>
-      )}
+      <div className="shrink-0 border-t border-slate-800/80 px-4 py-3">
+        {collapsed ? (
+          <div className="mx-auto h-1.5 w-1.5 rounded-full bg-emerald-500/60" />
+        ) : (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-600">v2.0.0-beta</span>
+            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+              connected
+            </span>
+          </div>
+        )}
+      </div>
     </aside>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Layout
-// ---------------------------------------------------------------------------
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
-
   return (
-    <div className="flex min-h-screen bg-slate-950 text-white">
+    <div className="flex min-h-screen bg-slate-950 text-white selection:bg-emerald-500/30">
+      {/* subtle ambient gradient */}
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(60rem_40rem_at_120%_-10%,rgba(16,185,129,0.06),transparent)]" />
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-      <main className="flex-1 overflow-auto p-8">{children}</main>
+      <main className="relative flex-1 overflow-auto">{children}</main>
     </div>
   );
 }

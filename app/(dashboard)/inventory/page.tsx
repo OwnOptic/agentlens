@@ -4,7 +4,25 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import type { Agent, Environment } from '@/lib/types';
 import { mockAgents, mockEnvironments, mockCapacity, mockMetrics } from '@/lib/mock/seed';
-
+import {
+  Boxes,
+  Users,
+  Gauge,
+  DollarSign,
+  Activity,
+  Filter,
+  ExternalLink,
+  RefreshCw,
+  Download,
+} from 'lucide-react';
+import {
+  Card,
+  Badge,
+  StatCard,
+  PageHeader,
+  SectionTitle,
+  Button,
+} from '@/components/ui';
 
 type SortField = 'name' | 'env' | 'owner' | 'state' | 'lifecycle' | 'created' | 'activity';
 type SortDirection = 'asc' | 'desc';
@@ -56,9 +74,7 @@ export default function InventoryPage() {
 
     if (filters.owner) {
       result = result.filter((a) =>
-        (a.ownerName || '')
-          .toLowerCase()
-          .includes(filters.owner.toLowerCase())
+        (a.ownerName || '').toLowerCase().includes(filters.owner.toLowerCase())
       );
     }
 
@@ -118,8 +134,7 @@ export default function InventoryPage() {
     }
   };
 
-  const envName =
-    environments.find((e) => e.id === filters.env)?.name || 'Unknown';
+  const envName = environments.find((e) => e.id === filters.env)?.name || 'Unknown';
 
   const lifecycleCounts = {
     poc: filtered.filter((a) => a.lifecycle === 'poc').length,
@@ -132,118 +147,112 @@ export default function InventoryPage() {
     inactive: filtered.filter((a) => a.state === 'Inactive').length,
   };
 
-  const SortHeader = ({
-    label,
-    field,
-  }: {
-    label: string;
-    field: SortField;
-  }) => (
+  const SortHeader = ({ label, field }: { label: string; field: SortField }) => (
     <th
-      className="cursor-pointer px-6 py-3 text-left text-sm font-semibold hover:bg-slate-800"
+      className="cursor-pointer px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500 hover:bg-slate-800/50"
       onClick={() => handleSort(field)}
     >
       <div className="flex items-center gap-2">
         {label}
-        <span className="text-xs text-slate-500">
+        <span className="text-slate-600">
           {sortField === field ? (sortDir === 'asc' ? '▲' : '▼') : '-'}
         </span>
       </div>
     </th>
   );
 
+  const lifecycleBadgeVariant = (lc: string | undefined) => {
+    if (lc === 'poc') return 'info' as const;
+    if (lc === 'pilot') return 'warning' as const;
+    if (lc === 'prod') return 'success' as const;
+    return 'neutral' as const;
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h2 className="mb-2 text-3xl font-bold">Agent Inventory</h2>
-        <p className="text-slate-400">
-          Filter and explore agents across your Copilot Studio environments
-        </p>
-      </div>
+    <div className="p-8">
+      <PageHeader
+        icon={Boxes}
+        title="Agent Inventory"
+        subtitle="Filter and explore agents across your Copilot Studio environments"
+        tone="emerald"
+        actions={
+          <>
+            <Button icon={RefreshCw} variant="ghost">Refresh</Button>
+            <Button icon={Download} variant="ghost">Export</Button>
+          </>
+        }
+      />
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">Total Agents</p>
-          <p className="mt-2 text-2xl font-bold">{filtered.length}</p>
-          <p className="mt-1 text-xs text-slate-500">in {envName}</p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">
-            Credit Usage
-          </p>
-          <p className="mt-2 text-2xl font-bold">
-            {capacity.pct.toFixed(1)}%
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {capacity.creditUsed.toLocaleString()} / {capacity.creditLimit.toLocaleString()}
-          </p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">Daily Cost</p>
-          <p className="mt-2 text-2xl font-bold">${totalCost.toFixed(2)}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Projected: ${avgProjectedMonthly.toFixed(2)}/mo
-          </p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">Status</p>
-          <div className="mt-2 flex gap-2 text-sm">
-            <span className="inline-block rounded-full bg-emerald-900/60 px-2 py-1 text-emerald-300">
-              {stateCounts.active} Active
-            </span>
-            <span className="inline-block rounded-full bg-slate-700/60 px-2 py-1 text-slate-400">
-              {stateCounts.inactive} Inactive
-            </span>
-          </div>
-        </div>
+      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          icon={Boxes}
+          label="Total Agents"
+          value={filtered.length}
+          sublabel={`in ${envName}`}
+          tone="emerald"
+        />
+        <StatCard
+          icon={Gauge}
+          label="Credit Usage"
+          value={`${capacity.pct.toFixed(1)}%`}
+          sublabel={`${capacity.creditUsed.toLocaleString()} / ${capacity.creditLimit.toLocaleString()}`}
+          tone={capacity.pct > 90 ? 'red' : capacity.pct > 75 ? 'amber' : 'sky'}
+        />
+        <StatCard
+          icon={DollarSign}
+          label="Daily Cost"
+          value={`$${totalCost.toFixed(2)}`}
+          sublabel={`Projected: $${avgProjectedMonthly.toFixed(2)}/mo`}
+          tone="violet"
+        />
+        <StatCard
+          icon={Activity}
+          label="Active Agents"
+          value={stateCounts.active}
+          sublabel={`${stateCounts.inactive} inactive`}
+          delta="flat"
+          tone="emerald"
+        />
       </div>
 
       {/* Filters */}
-      <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+      <Card className="mb-6 p-4">
+        <SectionTitle icon={Filter}>Filters</SectionTitle>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {/* Environment Filter */}
           <div>
-            <label className="mb-2 block text-sm font-medium">Environment</label>
+            <label className="mb-2 block text-xs font-medium text-slate-400">Environment</label>
             <select
               value={filters.env}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, env: e.target.value }))
-              }
-              className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+              onChange={(e) => setFilters((f) => ({ ...f, env: e.target.value }))}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
             >
               {environments.map((env) => (
-                <option key={env.id} value={env.id}>
-                  {env.name}
-                </option>
+                <option key={env.id} value={env.id}>{env.name}</option>
               ))}
             </select>
           </div>
 
           {/* Owner Filter */}
           <div>
-            <label className="mb-2 block text-sm font-medium">Owner</label>
+            <label className="mb-2 block text-xs font-medium text-slate-400">Owner</label>
             <input
               type="text"
               placeholder="Filter by owner..."
               value={filters.owner}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, owner: e.target.value }))
-              }
-              className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+              onChange={(e) => setFilters((f) => ({ ...f, owner: e.target.value }))}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
             />
           </div>
 
           {/* State Filter */}
           <div>
-            <label className="mb-2 block text-sm font-medium">State</label>
+            <label className="mb-2 block text-xs font-medium text-slate-400">State</label>
             <select
               value={filters.state}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, state: e.target.value }))
-              }
-              className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+              onChange={(e) => setFilters((f) => ({ ...f, state: e.target.value }))}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
             >
               <option value="">All States</option>
               <option value="Active">Active</option>
@@ -253,13 +262,11 @@ export default function InventoryPage() {
 
           {/* Lifecycle Filter */}
           <div>
-            <label className="mb-2 block text-sm font-medium">Lifecycle</label>
+            <label className="mb-2 block text-xs font-medium text-slate-400">Lifecycle</label>
             <select
               value={filters.lifecycle}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, lifecycle: e.target.value }))
-              }
-              className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+              onChange={(e) => setFilters((f) => ({ ...f, lifecycle: e.target.value }))}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
             >
               <option value="">All Stages</option>
               <option value="poc">PoC</option>
@@ -270,129 +277,99 @@ export default function InventoryPage() {
         </div>
 
         {/* Lifecycle Quick Filters */}
-        <div className="flex flex-wrap gap-2 border-t border-slate-700 pt-3">
-          <span className="inline-block text-xs font-medium text-slate-400">
-            Quick filter:
-          </span>
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3">
+          <span className="text-xs font-medium text-slate-500">Quick filter:</span>
           <button
-            onClick={() =>
-              setFilters((f) => ({ ...f, lifecycle: lifecycleCounts.poc > 0 ? 'poc' : '' }))
-            }
-            className="rounded-full bg-slate-700/50 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
+            onClick={() => setFilters((f) => ({ ...f, lifecycle: lifecycleCounts.poc > 0 ? 'poc' : '' }))}
+            className="rounded-full bg-sky-500/10 px-3 py-1 text-xs text-sky-400 ring-1 ring-sky-500/25 hover:bg-sky-500/20 transition-colors"
           >
             {lifecycleCounts.poc} PoC
           </button>
           <button
-            onClick={() =>
-              setFilters((f) => ({
-                ...f,
-                lifecycle: lifecycleCounts.pilot > 0 ? 'pilot' : '',
-              }))
-            }
-            className="rounded-full bg-slate-700/50 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
+            onClick={() => setFilters((f) => ({ ...f, lifecycle: lifecycleCounts.pilot > 0 ? 'pilot' : '' }))}
+            className="rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-400 ring-1 ring-amber-500/25 hover:bg-amber-500/20 transition-colors"
           >
             {lifecycleCounts.pilot} Pilot
           </button>
           <button
-            onClick={() =>
-              setFilters((f) => ({
-                ...f,
-                lifecycle: lifecycleCounts.prod > 0 ? 'prod' : '',
-              }))
-            }
-            className="rounded-full bg-slate-700/50 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
+            onClick={() => setFilters((f) => ({ ...f, lifecycle: lifecycleCounts.prod > 0 ? 'prod' : '' }))}
+            className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400 ring-1 ring-emerald-500/25 hover:bg-emerald-500/20 transition-colors"
           >
             {lifecycleCounts.prod} Prod
           </button>
         </div>
-      </div>
+      </Card>
 
       {/* Agents Table */}
-      {sorted.length === 0 ? (
-        <div className="rounded-lg border border-slate-700 bg-slate-800 p-8 text-center text-slate-400">
-          <p>No agents found matching your filters.</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-700 bg-slate-800">
-          <table className="w-full">
-            <thead className="border-b border-slate-700 bg-slate-900">
-              <tr>
-                <SortHeader label="Agent Name" field="name" />
-                <SortHeader label="Owner" field="owner" />
-                <SortHeader label="State" field="state" />
-                <SortHeader label="Lifecycle" field="lifecycle" />
-                <SortHeader label="Created" field="created" />
-                <SortHeader label="Last Activity" field="activity" />
-                <th className="px-6 py-3 text-left text-sm font-semibold">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((agent) => (
-                <tr
-                  key={`${agent.envId}-${agent.botId}`}
-                  className="border-b border-slate-700 hover:bg-slate-700/50 transition-colors"
-                >
-                  <td className="px-6 py-3 font-medium">{agent.name}</td>
-                  <td className="px-6 py-3 text-sm text-slate-300">
-                    {agent.ownerName || (
-                      <span className="italic text-slate-600">orphaned</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3 text-sm">
-                    <span
-                      className={[
-                        'rounded-full px-3 py-1 text-xs font-medium',
-                        agent.state === 'Active'
-                          ? 'bg-emerald-900/60 text-emerald-200'
-                          : 'bg-slate-700/60 text-slate-400',
-                      ].join(' ')}
-                    >
-                      {agent.state}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 text-sm">
-                    {agent.lifecycle ? (
-                      <span
-                        className={[
-                          'rounded-full px-3 py-1 text-xs font-medium',
-                          agent.lifecycle === 'poc'
-                            ? 'bg-blue-900/60 text-blue-200'
-                            : agent.lifecycle === 'pilot'
-                              ? 'bg-amber-900/60 text-amber-200'
-                              : 'bg-emerald-900/60 text-emerald-200',
-                        ].join(' ')}
-                      >
-                        {agent.lifecycle.toUpperCase()}
-                      </span>
-                    ) : (
-                      <span className="text-slate-600">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3 text-sm text-slate-400">
-                    {new Date(agent.createdOn).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-3 text-sm text-slate-400">
-                    {agent.lastActivity
-                      ? new Date(agent.lastActivity).toLocaleDateString()
-                      : '-'}
-                  </td>
-                  <td className="px-6 py-3 text-sm">
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    <Link
-                      href={`/agents/${agent.botId}` as any}
-                      className="inline-block rounded-md bg-emerald-900/60 px-3 py-1 text-emerald-300 hover:bg-emerald-800/80 transition-colors"
-                    >
-                      View
-                    </Link>
-                  </td>
+      <Card>
+        <SectionTitle icon={Users} right={<span className="text-xs text-slate-500">{sorted.length} agents</span>}>
+          <span className="px-4 pt-4 block">Agents</span>
+        </SectionTitle>
+        {sorted.length === 0 ? (
+          <div className="p-8 text-center text-slate-400">
+            <p>No agents found matching your filters.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-slate-800 bg-slate-950/50">
+                <tr>
+                  <SortHeader label="Agent Name" field="name" />
+                  <SortHeader label="Owner" field="owner" />
+                  <SortHeader label="State" field="state" />
+                  <SortHeader label="Lifecycle" field="lifecycle" />
+                  <SortHeader label="Created" field="created" />
+                  <SortHeader label="Last Activity" field="activity" />
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest text-slate-500">
+                    Action
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {sorted.map((agent) => (
+                  <tr
+                    key={`${agent.envId}-${agent.botId}`}
+                    className="border-b border-slate-800/60 transition-colors hover:bg-slate-800/30"
+                  >
+                    <td className="px-6 py-3 font-medium text-slate-100">{agent.name}</td>
+                    <td className="px-6 py-3 text-sm text-slate-300">
+                      {agent.ownerName || (
+                        <span className="italic text-slate-600">orphaned</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3 text-sm">
+                      <Badge variant={agent.state === 'Active' ? 'success' : 'neutral'} dot={agent.state === 'Active'}>
+                        {agent.state}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-3 text-sm">
+                      {agent.lifecycle ? (
+                        <Badge variant={lifecycleBadgeVariant(agent.lifecycle)}>
+                          {agent.lifecycle.toUpperCase()}
+                        </Badge>
+                      ) : (
+                        <span className="text-slate-600">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-slate-400">
+                      {new Date(agent.createdOn).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-slate-400">
+                      {agent.lastActivity ? new Date(agent.lastActivity).toLocaleDateString() : '-'}
+                    </td>
+                    <td className="px-6 py-3 text-sm">
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <Button icon={ExternalLink} href={`/agents/${agent.botId}` as any} variant="ghost">
+                        View
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

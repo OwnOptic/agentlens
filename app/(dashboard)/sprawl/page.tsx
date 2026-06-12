@@ -3,7 +3,24 @@
 import React, { useState, useMemo } from 'react';
 import type { Environment, MigrationStatus } from '@/lib/types';
 import { mockEnvironments, mockAgents, mockCapacity } from '@/lib/mock/seed';
-
+import {
+  Network,
+  Server,
+  Boxes,
+  TrendingUp,
+  Workflow,
+  Activity,
+  AlertTriangle,
+  RefreshCw,
+} from 'lucide-react';
+import {
+  Card,
+  Badge,
+  StatCard,
+  PageHeader,
+  SectionTitle,
+  Button,
+} from '@/components/ui';
 
 interface EnvironmentSprawlCard {
   environment: Environment;
@@ -14,9 +31,7 @@ interface EnvironmentSprawlCard {
 }
 
 export default function SprawlPage() {
-  const [migrationState, setMigrationState] = useState<
-    Record<string, MigrationStatus>
-  >({});
+  const [migrationState, setMigrationState] = useState<Record<string, MigrationStatus>>({});
 
   const sprawlData: EnvironmentSprawlCard[] = useMemo(() => {
     return mockEnvironments.map((env) => {
@@ -49,9 +64,7 @@ export default function SprawlPage() {
   const totalAgents = mockAgents.length;
   const totalEnvs = mockEnvironments.length;
   const defaultEnvData = sprawlData.find((s) => s.environment.isDefault);
-  const prodEnvCount = sprawlData.filter(
-    (s) => s.environment.type === 'Production'
-  ).length;
+  const prodEnvCount = sprawlData.filter((s) => s.environment.type === 'Production').length;
 
   const overallMigrationProgress = useMemo(() => {
     let toMigrate = 0;
@@ -84,6 +97,18 @@ export default function SprawlPage() {
     }));
   };
 
+  const migrationBadgeVariant = (status: MigrationStatus) => {
+    if (status === 'moved') return 'success' as const;
+    if (status === 'notified') return 'warning' as const;
+    return 'info' as const;
+  };
+
+  const migrationLabel: Record<MigrationStatus, string> = {
+    to_migrate: 'To Migrate',
+    notified: 'Notified',
+    moved: 'Moved',
+  };
+
   const MigrationButton = ({
     envId,
     botId,
@@ -102,7 +127,7 @@ export default function SprawlPage() {
       className={[
         'rounded-md px-2 py-1 text-xs font-medium transition-colors',
         status === targetStatus
-          ? 'bg-emerald-900/80 text-emerald-200'
+          ? 'bg-emerald-600/80 text-emerald-100'
           : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700',
       ].join(' ')}
     >
@@ -111,170 +136,161 @@ export default function SprawlPage() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h2 className="mb-2 text-3xl font-bold">Environment Sprawl</h2>
-        <p className="text-slate-400">
-          Monitor multi-environment agent distribution and migration progress
-        </p>
-      </div>
+    <div className="p-8">
+      <PageHeader
+        icon={Network}
+        title="Environment Sprawl"
+        subtitle="Monitor multi-environment agent distribution and migration progress"
+        tone="sky"
+        actions={
+          <Button icon={RefreshCw} variant="ghost">Refresh</Button>
+        }
+      />
 
       {/* Overall KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">Total Environments</p>
-          <p className="mt-2 text-2xl font-bold">{totalEnvs}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            {prodEnvCount} Production
-          </p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">Total Agents</p>
-          <p className="mt-2 text-2xl font-bold">{totalAgents}</p>
-          <p className="mt-1 text-xs text-slate-500">across all environments</p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">Default Env Agents</p>
-          <p className="mt-2 text-2xl font-bold">
-            {defaultEnvData?.agentCount || 0}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {defaultEnvData?.activeAgents || 0} active
-          </p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-          <p className="text-sm font-medium text-slate-400">Migration Progress</p>
-          <p className="mt-2 text-2xl font-bold">
-            {overallMigrationProgress.pctMoved}%
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {overallMigrationProgress.moved} agents moved
-          </p>
-        </div>
+      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          icon={Server}
+          label="Total Environments"
+          value={totalEnvs}
+          sublabel={`${prodEnvCount} Production`}
+          tone="sky"
+        />
+        <StatCard
+          icon={Boxes}
+          label="Total Agents"
+          value={totalAgents}
+          sublabel="across all environments"
+          tone="emerald"
+        />
+        <StatCard
+          icon={AlertTriangle}
+          label="Default Env Agents"
+          value={defaultEnvData?.agentCount || 0}
+          sublabel={`${defaultEnvData?.activeAgents || 0} active`}
+          tone="amber"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Migration Progress"
+          value={`${overallMigrationProgress.pctMoved}%`}
+          sublabel={`${overallMigrationProgress.moved} agents moved`}
+          tone={overallMigrationProgress.pctMoved === 100 ? 'emerald' : overallMigrationProgress.pctMoved > 50 ? 'sky' : 'amber'}
+        />
       </div>
 
       {/* Overall Migration Progress Bar */}
-      <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Rollup Migration Progress</h3>
-          <span className="text-sm text-slate-400">
+      <Card className="mb-6 p-4">
+        <SectionTitle icon={Workflow} right={
+          <span className="text-xs text-slate-500">
             {overallMigrationProgress.moved} / {totalAgents} agents
           </span>
-        </div>
-        <div className="space-y-2">
-          <div className="h-6 w-full overflow-hidden rounded-full border border-slate-700 bg-slate-900">
+        }>
+          Rollup Migration Progress
+        </SectionTitle>
+        <div className="space-y-3">
+          <div className="h-6 w-full overflow-hidden rounded-full border border-slate-700 bg-slate-950">
             <div
-              className="flex h-full items-center"
+              className="flex h-full items-center transition-all duration-500"
               style={{
                 width: `${overallMigrationProgress.pctMoved}%`,
                 background: 'linear-gradient(90deg, #059669, #10b981)',
               }}
             >
               <span className="ml-2 text-xs font-bold text-white">
-                {overallMigrationProgress.pctMoved > 10 &&
-                  `${overallMigrationProgress.pctMoved}%`}
+                {overallMigrationProgress.pctMoved > 10 && `${overallMigrationProgress.pctMoved}%`}
               </span>
             </div>
           </div>
-          <div className="flex gap-4 text-xs text-slate-400">
-            <div>
-              <span className="inline-block h-2 w-2 rounded-full bg-blue-500 mr-1"></span>
-              To Migrate: {overallMigrationProgress.toMigrate}
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-1.5">
+              <Badge variant="info">{overallMigrationProgress.toMigrate} To Migrate</Badge>
             </div>
-            <div>
-              <span className="inline-block h-2 w-2 rounded-full bg-amber-500 mr-1"></span>
-              Notified: {overallMigrationProgress.notified}
+            <div className="flex items-center gap-1.5">
+              <Badge variant="warning">{overallMigrationProgress.notified} Notified</Badge>
             </div>
-            <div>
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 mr-1"></span>
-              Moved: {overallMigrationProgress.moved}
+            <div className="flex items-center gap-1.5">
+              <Badge variant="success">{overallMigrationProgress.moved} Moved</Badge>
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Environment Cards with Agent Lists */}
       <div className="space-y-4">
+        <SectionTitle icon={Network}>Environments</SectionTitle>
         {sprawlData.map((data) => (
-          <div
-            key={data.environment.id}
-            className="rounded-lg border border-slate-700 bg-slate-800/30 p-6"
-          >
+          <Card key={data.environment.id} className="p-6">
             {/* Env Header */}
-            <div className="mb-4 flex items-start justify-between border-b border-slate-700 pb-4">
+            <div className="mb-4 flex items-start justify-between border-b border-slate-800 pb-4">
               <div>
-                <h3 className="text-lg font-semibold">{data.environment.name}</h3>
-                <p className="mt-1 text-sm text-slate-400">
-                  {data.environment.type} • {data.environment.region}
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-slate-100">{data.environment.name}</h3>
+                  {data.environment.isDefault && (
+                    <Badge variant="info">Default</Badge>
+                  )}
+                  {data.environment.type === 'Production' && (
+                    <Badge variant="accent">Production</Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-slate-500">
+                  {data.environment.type} &bull; {data.environment.region}
                 </p>
               </div>
-              <div className="rounded-full bg-slate-700/50 px-3 py-1 text-sm font-medium">
-                {data.agentCount} agents
-              </div>
+              <Badge variant="neutral">{data.agentCount} agents</Badge>
             </div>
 
             {/* Env Stats */}
             <div className="mb-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-md bg-slate-900/50 p-3">
-                <p className="text-xs font-medium text-slate-400">Status</p>
-                <div className="mt-2 flex gap-2">
-                  <span className="inline-block rounded-full bg-emerald-900/60 px-2 py-1 text-xs text-emerald-300">
-                    {data.activeAgents} Active
-                  </span>
-                  <span className="inline-block rounded-full bg-slate-700/60 px-2 py-1 text-xs text-slate-400">
-                    {data.inactiveAgents} Inactive
-                  </span>
+              <div className="rounded-lg bg-slate-950/50 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="success" dot>{data.activeAgents} Active</Badge>
+                  <Badge variant="neutral">{data.inactiveAgents} Inactive</Badge>
                 </div>
               </div>
-              <div className="rounded-md bg-slate-900/50 p-3">
-                <p className="text-xs font-medium text-slate-400">Migration</p>
-                <div className="mt-2 flex gap-2">
-                  <span className="inline-block rounded-full bg-blue-900/60 px-2 py-1 text-xs text-blue-300">
-                    {data.migrationStatus.to_migrate} To Migrate
-                  </span>
-                  <span className="inline-block rounded-full bg-amber-900/60 px-2 py-1 text-xs text-amber-300">
-                    {data.migrationStatus.notified} Notified
-                  </span>
+              <div className="rounded-lg bg-slate-950/50 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Migration</p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="info">{data.migrationStatus.to_migrate} To Migrate</Badge>
+                  <Badge variant="warning">{data.migrationStatus.notified} Notified</Badge>
+                  <Badge variant="success">{data.migrationStatus.moved} Moved</Badge>
                 </div>
               </div>
-              <div className="rounded-md bg-slate-900/50 p-3">
-                <p className="text-xs font-medium text-slate-400">Capacity</p>
-                <div className="mt-2">
-                  {(() => {
-                    const cap = mockCapacity.find(
-                      (c) => c.envId === data.environment.id
-                    );
-                    if (!cap) return <span className="text-xs text-slate-500">N/A</span>;
-                    return (
-                      <div className="space-y-1">
-                        <div className="h-1.5 w-full rounded-full border border-slate-600 bg-slate-900">
-                          <div
-                            className={[
-                              'h-full rounded-full transition-colors',
-                              cap.overage
-                                ? 'bg-red-500'
-                                : cap.pct > 80
-                                  ? 'bg-amber-500'
-                                  : 'bg-emerald-500',
-                            ].join(' ')}
-                            style={{ width: `${Math.min(cap.pct, 100)}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-xs text-slate-400">
-                          {cap.pct.toFixed(1)}% {cap.overage && '(OVERAGE)'}
-                        </span>
+              <div className="rounded-lg bg-slate-950/50 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Capacity</p>
+                {(() => {
+                  const cap = mockCapacity.find((c) => c.envId === data.environment.id);
+                  if (!cap) return <span className="text-xs text-slate-500">N/A</span>;
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="h-1.5 w-full rounded-full bg-slate-800">
+                        <div
+                          className={[
+                            'h-full rounded-full transition-all',
+                            cap.overage ? 'bg-red-500' : cap.pct > 80 ? 'bg-amber-500' : 'bg-emerald-500',
+                          ].join(' ')}
+                          style={{ width: `${Math.min(cap.pct, 100)}%` }}
+                        />
                       </div>
-                    );
-                  })()}
-                </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">{cap.pct.toFixed(1)}%</span>
+                        {cap.overage && <Badge variant="critical">OVERAGE</Badge>}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
             {/* Agent Migration State Buttons */}
             {data.agentCount > 0 && (
-              <div className="rounded-md border border-slate-700 bg-slate-900/50 p-4">
-                <p className="mb-3 text-sm font-medium">Agents</p>
+              <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-4">
+                <SectionTitle icon={Activity} right={
+                  <span className="text-xs text-slate-500">{data.agentCount} agents</span>
+                }>
+                  Agents
+                </SectionTitle>
                 <div className="space-y-2">
                   {mockAgents
                     .filter((a) => a.envId === data.environment.id)
@@ -284,36 +300,41 @@ export default function SprawlPage() {
                       return (
                         <div
                           key={key}
-                          className="flex items-center justify-between rounded-md bg-slate-800/50 p-2"
+                          className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2"
                         >
                           <div className="flex-1">
-                            <p className="text-sm font-medium">{agent.name}</p>
+                            <p className="text-sm font-medium text-slate-200">{agent.name}</p>
                             <p className="text-xs text-slate-500">
                               {agent.ownerName || 'orphaned'}
                             </p>
                           </div>
-                          <div className="flex gap-1">
-                            <MigrationButton
-                              envId={agent.envId}
-                              botId={agent.botId}
-                              status={status}
-                              targetStatus="to_migrate"
-                              label="To Migrate"
-                            />
-                            <MigrationButton
-                              envId={agent.envId}
-                              botId={agent.botId}
-                              status={status}
-                              targetStatus="notified"
-                              label="Notified"
-                            />
-                            <MigrationButton
-                              envId={agent.envId}
-                              botId={agent.botId}
-                              status={status}
-                              targetStatus="moved"
-                              label="Moved"
-                            />
+                          <div className="flex items-center gap-2">
+                            <Badge variant={migrationBadgeVariant(status)}>
+                              {migrationLabel[status]}
+                            </Badge>
+                            <div className="flex gap-1">
+                              <MigrationButton
+                                envId={agent.envId}
+                                botId={agent.botId}
+                                status={status}
+                                targetStatus="to_migrate"
+                                label="To Migrate"
+                              />
+                              <MigrationButton
+                                envId={agent.envId}
+                                botId={agent.botId}
+                                status={status}
+                                targetStatus="notified"
+                                label="Notified"
+                              />
+                              <MigrationButton
+                                envId={agent.envId}
+                                botId={agent.botId}
+                                status={status}
+                                targetStatus="moved"
+                                label="Moved"
+                              />
+                            </div>
                           </div>
                         </div>
                       );
@@ -321,7 +342,7 @@ export default function SprawlPage() {
                 </div>
               </div>
             )}
-          </div>
+          </Card>
         ))}
       </div>
     </div>

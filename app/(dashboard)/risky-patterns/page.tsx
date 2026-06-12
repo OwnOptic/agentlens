@@ -18,6 +18,24 @@ import {
   PATTERN_LABELS,
   type AgentPatternResult,
 } from '@/lib/compliance/riskyPatterns';
+import {
+  Card,
+  Badge,
+  StatCard,
+  PageHeader,
+  SectionTitle,
+  Button,
+} from '@/components/ui';
+import {
+  AlertTriangle,
+  Activity,
+  Filter,
+  Download,
+  RefreshCw,
+  Workflow,
+  ShieldCheck,
+  Boxes,
+} from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Cell indicator
@@ -50,20 +68,18 @@ function PatternCell({ active }: { active: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Risk score badge
+// Risk score badge (mapped to design-system Badge)
 // ---------------------------------------------------------------------------
 function RiskBadge({ score }: { score: number }) {
-  const cls =
+  const variant =
     score >= 15
-      ? 'bg-red-900/60 text-red-300 border border-red-700'
+      ? 'critical' as const
       : score >= 8
-      ? 'bg-yellow-900/60 text-yellow-300 border border-yellow-700'
+      ? 'warning' as const
       : score >= 3
-      ? 'bg-slate-700 text-slate-300 border border-slate-600'
-      : 'bg-slate-800 text-slate-500 border border-slate-700';
-  return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-bold ${cls}`}>{score}</span>
-  );
+      ? 'neutral' as const
+      : 'neutral' as const;
+  return <Badge variant={variant}>{score}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +99,7 @@ function PatternHeader({ label }: { label: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Summary stats bar
+// Summary stats bar - restyled as StatCards row
 // ---------------------------------------------------------------------------
 function StatBar({ rows }: { rows: AgentPatternResult[] }) {
   const patternTotals = ALL_RISKY_PATTERNS.map((p) => ({
@@ -95,19 +111,15 @@ function StatBar({ rows }: { rows: AgentPatternResult[] }) {
   return (
     <div className="flex flex-wrap gap-3">
       {patternTotals.map(({ pattern, label, count }) => (
-        <div
-          key={pattern}
-          className="flex items-center gap-1.5 rounded border border-slate-800 bg-slate-900 px-3 py-1.5"
-        >
+        <Card key={pattern} className="flex items-center gap-2 px-3 py-2">
           <span className="text-xs text-slate-400">{label}</span>
-          <span
-            className={`text-sm font-bold ${
-              count > 3 ? 'text-red-400' : count > 1 ? 'text-yellow-400' : 'text-slate-300'
-            }`}
+          <Badge
+            variant={count > 3 ? 'critical' : count > 1 ? 'warning' : 'neutral'}
+            dot={count > 3}
           >
             {count}
-          </span>
-        </div>
+          </Badge>
+        </Card>
       ))}
     </div>
   );
@@ -116,7 +128,6 @@ function StatBar({ rows }: { rows: AgentPatternResult[] }) {
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
-
 
 export default function RiskyPatternsPage() {
   const [lifecycleFilter, setLifecycleFilter] = useState<string>('all');
@@ -144,155 +155,208 @@ export default function RiskyPatternsPage() {
     });
   }, [allRows, lifecycleFilter, envTypeFilter, patternFilter, minRisk]);
 
+  const highRiskCount = allRows.filter((r) => r.riskScore >= 15).length;
+  const mediumRiskCount = allRows.filter((r) => r.riskScore >= 8 && r.riskScore < 15).length;
+  const patternsDetectedCount = ALL_RISKY_PATTERNS.filter((p) =>
+    allRows.some((r) => r.patterns[p]),
+  ).length;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Risky Patterns</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Matrix of agents versus detected governance risk patterns. Sorted by risk score.
-        </p>
+    <div className="p-8">
+      <PageHeader
+        icon={AlertTriangle}
+        title="Risky Patterns"
+        subtitle="Matrix of agents versus detected governance risk patterns. Sorted by risk score."
+        tone="amber"
+        badge={
+          highRiskCount > 0 ? (
+            <Badge variant="critical" dot>{highRiskCount} high risk</Badge>
+          ) : (
+            <Badge variant="success">All clear</Badge>
+          )
+        }
+        actions={
+          <>
+            <Button icon={RefreshCw} variant="ghost">Refresh</Button>
+            <Button icon={Download} variant="ghost">Export</Button>
+          </>
+        }
+      />
+
+      {/* KPI stat cards */}
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard
+          icon={AlertTriangle}
+          label="High Risk Agents"
+          value={highRiskCount}
+          sublabel="risk score >= 15"
+          tone={highRiskCount > 0 ? 'red' : 'emerald'}
+        />
+        <StatCard
+          icon={Activity}
+          label="Medium Risk Agents"
+          value={mediumRiskCount}
+          sublabel="risk score 8-14"
+          tone={mediumRiskCount > 0 ? 'amber' : 'emerald'}
+        />
+        <StatCard
+          icon={Workflow}
+          label="Patterns Detected"
+          value={patternsDetectedCount}
+          sublabel={`of ${ALL_RISKY_PATTERNS.length} total patterns`}
+          tone="sky"
+        />
+        <StatCard
+          icon={Boxes}
+          label="Agents Scanned"
+          value={allRows.length}
+          sublabel={`${filtered.length} match current filters`}
+          tone="violet"
+        />
       </div>
 
-      {/* Summary stats */}
-      <StatBar rows={allRows} />
+      {/* Summary stats bar */}
+      <div className="mb-6">
+        <SectionTitle icon={Activity}>Pattern Prevalence</SectionTitle>
+        <StatBar rows={allRows} />
+      </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <select
-          value={lifecycleFilter}
-          onChange={(e) => setLifecycleFilter(e.target.value)}
-          className="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-300 focus:outline-none"
-        >
-          <option value="all">All lifecycles</option>
-          {lifecycles.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
-        <select
-          value={envTypeFilter}
-          onChange={(e) => setEnvTypeFilter(e.target.value)}
-          className="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-300 focus:outline-none"
-        >
-          <option value="all">All env types</option>
-          {envTypes.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        <select
-          value={patternFilter}
-          onChange={(e) => setPatternFilter(e.target.value as RiskyPattern | 'all')}
-          className="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-300 focus:outline-none"
-        >
-          <option value="all">All patterns</option>
-          {ALL_RISKY_PATTERNS.map((p) => (
-            <option key={p} value={p}>
-              {PATTERN_LABELS[p]}
-            </option>
-          ))}
-        </select>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-400">Min risk</label>
-          <input
-            type="range"
-            min={0}
-            max={30}
-            value={minRisk}
-            onChange={(e) => setMinRisk(Number(e.target.value))}
-            className="w-24 accent-emerald-500"
-          />
-          <span className="min-w-[1.5rem] text-xs font-medium text-slate-300">{minRisk}</span>
+      <Card className="mb-4 p-4">
+        <SectionTitle icon={Filter}>Filters</SectionTitle>
+        <div className="flex flex-wrap gap-3">
+          <select
+            value={lifecycleFilter}
+            onChange={(e) => setLifecycleFilter(e.target.value)}
+            className="rounded-lg bg-slate-800/80 px-3 py-1.5 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none"
+          >
+            <option value="all">All lifecycles</option>
+            {lifecycles.map((l) => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          <select
+            value={envTypeFilter}
+            onChange={(e) => setEnvTypeFilter(e.target.value)}
+            className="rounded-lg bg-slate-800/80 px-3 py-1.5 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none"
+          >
+            <option value="all">All env types</option>
+            {envTypes.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <select
+            value={patternFilter}
+            onChange={(e) => setPatternFilter(e.target.value as RiskyPattern | 'all')}
+            className="rounded-lg bg-slate-800/80 px-3 py-1.5 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none"
+          >
+            <option value="all">All patterns</option>
+            {ALL_RISKY_PATTERNS.map((p) => (
+              <option key={p} value={p}>{PATTERN_LABELS[p]}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-400">Min risk</label>
+            <input
+              type="range"
+              min={0}
+              max={30}
+              value={minRisk}
+              onChange={(e) => setMinRisk(Number(e.target.value))}
+              className="w-24 accent-emerald-500"
+            />
+            <span className="min-w-[1.5rem] text-xs font-medium text-slate-300">{minRisk}</span>
+          </div>
+          <span className="ml-auto self-center text-xs text-slate-500">
+            {filtered.length} of {allRows.length} agents
+          </span>
         </div>
-        <span className="ml-auto self-center text-xs text-slate-500">
-          {filtered.length} of {allRows.length} agents
-        </span>
-      </div>
+      </Card>
 
       {/* Matrix */}
-      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900 p-5">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-800">
-              <th className="pb-2 pr-4 text-left text-xs uppercase tracking-wider text-slate-500">
-                Agent
-              </th>
-              <th className="pb-2 pr-4 text-left text-xs uppercase tracking-wider text-slate-500">
-                Env / Lifecycle
-              </th>
-              {ALL_RISKY_PATTERNS.map((p) => (
-                <PatternHeader key={p} label={PATTERN_LABELS[p]} />
-              ))}
-              <th className="pb-2 pl-4 text-left text-xs uppercase tracking-wider text-slate-500">
-                Risk
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={ALL_RISKY_PATTERNS.length + 3}
-                  className="py-10 text-center text-slate-500"
-                >
-                  No agents match the current filters.
-                </td>
+      <Card className="p-5">
+        <SectionTitle icon={AlertTriangle}>Agent x Pattern Matrix</SectionTitle>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-800">
+                <th className="pb-2 pr-4 text-left text-xs uppercase tracking-wider text-slate-500">
+                  Agent
+                </th>
+                <th className="pb-2 pr-4 text-left text-xs uppercase tracking-wider text-slate-500">
+                  Env / Lifecycle
+                </th>
+                {ALL_RISKY_PATTERNS.map((p) => (
+                  <PatternHeader key={p} label={PATTERN_LABELS[p]} />
+                ))}
+                <th className="pb-2 pl-4 text-left text-xs uppercase tracking-wider text-slate-500">
+                  Risk
+                </th>
               </tr>
-            ) : (
-              filtered.map((row) => (
-                <tr
-                  key={row.agentRef}
-                  className="border-b border-slate-800/60 hover:bg-slate-800/30"
-                >
-                  <td className="py-2.5 pr-4">
-                    <span className="font-medium text-slate-200">{row.agentName}</span>
-                  </td>
-                  <td className="py-2.5 pr-4 text-xs text-slate-400">
-                    <span className="block">{row.envType}</span>
-                    <span className="text-slate-600">{row.lifecycle ?? 'unset'}</span>
-                  </td>
-                  {ALL_RISKY_PATTERNS.map((p) => (
-                    <td key={p} className="px-1 py-2.5 text-center">
-                      <PatternCell active={row.patterns[p]} />
-                    </td>
-                  ))}
-                  <td className="py-2.5 pl-4">
-                    <RiskBadge score={row.riskScore} />
-                    {row.patternCount > 0 && (
-                      <span className="ml-1 text-xs text-slate-500">
-                        ({row.patternCount}p)
-                      </span>
-                    )}
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={ALL_RISKY_PATTERNS.length + 3}
+                    className="py-10 text-center text-slate-500"
+                  >
+                    No agents match the current filters.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                filtered.map((row) => (
+                  <tr
+                    key={row.agentRef}
+                    className="border-b border-slate-800/60 hover:bg-slate-800/30"
+                  >
+                    <td className="py-2.5 pr-4">
+                      <span className="font-medium text-slate-200">{row.agentName}</span>
+                    </td>
+                    <td className="py-2.5 pr-4 text-xs text-slate-400">
+                      <span className="block">{row.envType}</span>
+                      <span className="text-slate-600">{row.lifecycle ?? 'unset'}</span>
+                    </td>
+                    {ALL_RISKY_PATTERNS.map((p) => (
+                      <td key={p} className="px-1 py-2.5 text-center">
+                        <PatternCell active={row.patterns[p]} />
+                      </td>
+                    ))}
+                    <td className="py-2.5 pl-4">
+                      <RiskBadge score={row.riskScore} />
+                      {row.patternCount > 0 && (
+                        <span className="ml-1 text-xs text-slate-500">
+                          ({row.patternCount}p)
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+      <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500">
         <span className="font-medium text-slate-400">Legend:</span>
-        <span className="flex items-center gap-1">
+        <span className="flex items-center gap-1.5">
           <PatternCell active={true} />
           Pattern detected
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex items-center gap-1.5">
           <PatternCell active={false} />
           Not detected
         </span>
-        <span className="flex items-center gap-1">
-          <RiskBadge score={15} /> High risk ({'>='}15)
+        <span className="flex items-center gap-1.5">
+          <Badge variant="critical">15+</Badge> High risk
         </span>
-        <span className="flex items-center gap-1">
-          <RiskBadge score={8} /> Medium risk (8-14)
+        <span className="flex items-center gap-1.5">
+          <Badge variant="warning">8-14</Badge> Medium risk
         </span>
-        <span className="flex items-center gap-1">
-          <RiskBadge score={3} /> Low risk (3-7)
+        <span className="flex items-center gap-1.5">
+          <Badge variant="neutral">3-7</Badge> Low risk
         </span>
       </div>
     </div>

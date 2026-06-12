@@ -1,208 +1,99 @@
 'use client';
 
 /**
- * Ask (AI) page
- *
- * Natural-language query interface over the read-only AgentLens schema.
- * Submits to POST /api/ask and renders the result as a table.
+ * Ask (AI) - natural-language Q&A grounded on REAL tenant data (Azure Resource Graph),
+ * answered by Azure OpenAI. Configure AZURE_OPENAI_* in .env.local to enable.
  */
 
-import React, { useState, useRef } from 'react';
-import type { NlQueryResult } from '@/lib/ai/nlQuery';
-import { ALLOWLISTED_SCHEMA } from '@/lib/ai/nlQuery';
+import React, { useState } from 'react';
+import { Sparkles, Send, AlertTriangle, Database, Loader2 } from 'lucide-react';
+import { Card, Badge, PageHeader, SectionTitle, Button } from '@/components/ui';
 
-// ---------------------------------------------------------------------------
-// Suggested questions
-// ---------------------------------------------------------------------------
-const SUGGESTIONS = [
-  'Show all agents in production',
-  'Which environments are in credit overage?',
-  'Show all agents with no owner',
-  'List open critical alerts',
-  'Show all open compliance violations',
-  'Show all PoC agents',
-  'List all environments',
-];
-
-// ---------------------------------------------------------------------------
-// ResultTable
-// ---------------------------------------------------------------------------
-function ResultTable({ result }: { result: NlQueryResult }) {
-  if (result.error) {
-    return (
-      <div className="rounded-md border border-red-800 bg-red-950/40 p-4 text-sm text-red-400">
-        {result.error}
-      </div>
-    );
-  }
-
-  if (result.rows.length === 0) {
-    return (
-      <p className="text-sm text-slate-400 italic">
-        Query returned 0 rows.
-      </p>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-md border border-slate-800">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-slate-800 text-left">
-            {result.columns.map((col) => (
-              <th
-                key={col}
-                className="px-3 py-2 font-medium text-slate-300 whitespace-nowrap"
-              >
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {result.rows.map((row, i) => (
-            <tr
-              key={i}
-              className="border-t border-slate-800 hover:bg-slate-800/40 transition-colors"
-            >
-              {result.columns.map((col) => {
-                const val = row[col];
-                const display =
-                  val === null || val === undefined
-                    ? ''
-                    : typeof val === 'object'
-                    ? JSON.stringify(val)
-                    : String(val);
-                return (
-                  <td key={col} className="px-3 py-2 text-slate-300 whitespace-nowrap">
-                    {display}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+interface AskResponse {
+  answer?: string;
+  grounded?: boolean;
+  dataSource?: string;
+  error?: string;
+  hint?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+const SUGGESTIONS = [
+  'How many environments do I have and what are they?',
+  'Do I have any Copilot Studio agents?',
+  'Which environment is the default one?',
+  'How many connectors are in my tenant?',
+  'Summarize my tenant governance posture.',
+  'Are there any agents without an owner?',
+];
+
 export default function AskPage() {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<NlQueryResult | null>(null);
-  const [showSchema, setShowSchema] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [resp, setResp] = useState<AskResponse | null>(null);
 
-  async function handleSubmit(e: React.FormEvent | null, overrideQuestion?: string) {
-    if (e) e.preventDefault();
-    const q = (overrideQuestion ?? question).trim();
-    if (!q) return;
-
+  async function submit(q: string) {
+    const trimmed = q.trim();
+    if (!trimmed) return;
     setLoading(true);
-    setResult(null);
-
+    setResp(null);
     try {
       const res = await fetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({ question: trimmed }),
       });
-      const data = (await res.json()) as NlQueryResult;
-      setResult(data);
+      setResp(await res.json());
     } catch {
-      setResult({
-        sql: '',
-        columns: [],
-        rows: [],
-        isMock: true,
-        error: 'Network error - could not reach /api/ask',
-      });
+      setResp({ error: 'Network error - could not reach /api/ask' });
     } finally {
       setLoading(false);
     }
   }
 
-  function handleSuggestion(s: string) {
-    setQuestion(s);
-    void handleSubmit(null, s);
-  }
-
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Ask (AI)</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Ask a question in plain English. The engine translates it to read-only SQL
-          over the AgentLens schema and returns the matching data.
-        </p>
-      </div>
+    <div className="mx-auto max-w-4xl p-8">
+      <PageHeader
+        icon={Sparkles}
+        tone="violet"
+        title="Ask (AI)"
+        subtitle="Ask in plain English. Answers are generated by Azure OpenAI, grounded on your real tenant data (Azure Resource Graph) - never invented."
+      />
 
-      {/* Schema toggle */}
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowSchema((v) => !v)}
-          className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+      {/* Query box */}
+      <Card className="p-4">
+        <form
+          onSubmit={(e) => { e.preventDefault(); void submit(question); }}
+          className="space-y-3"
         >
-          {showSchema ? 'Hide schema' : 'Show allowlisted schema'}
-        </button>
-        {showSchema && (
-          <pre className="mt-2 overflow-x-auto rounded-md border border-slate-700 bg-slate-900 p-4 text-xs text-slate-400">
-            {ALLOWLISTED_SCHEMA}
-          </pre>
-        )}
-      </div>
-
-      {/* Query form */}
-      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
-        <textarea
-          ref={inputRef}
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="e.g. Which environments are in credit overage?"
-          rows={3}
-          className="w-full resize-none rounded-md border border-slate-700 bg-slate-900
-                     px-4 py-3 text-sm text-slate-200 placeholder-slate-600
-                     focus:outline-none focus:ring-2 focus:ring-emerald-600"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              void handleSubmit(null);
-            }
-          }}
-        />
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={loading || !question.trim()}
-            className="rounded-md bg-emerald-700 px-5 py-2 text-sm font-medium
-                       text-white transition-colors hover:bg-emerald-600
-                       disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? 'Running...' : 'Run query'}
-          </button>
-          <span className="text-xs text-slate-600">or Cmd+Enter</span>
-        </div>
-      </form>
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="e.g. How many environments do I have and which is the default?"
+            rows={3}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(question); }
+            }}
+            className="w-full resize-none rounded-lg border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-600/50"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-600">Cmd/Ctrl + Enter to send</span>
+            <Button variant="primary" icon={loading ? Loader2 : Send} onClick={() => void submit(question)}>
+              {loading ? 'Thinking...' : 'Ask'}
+            </Button>
+          </div>
+        </form>
+      </Card>
 
       {/* Suggestions */}
-      <div>
-        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-slate-600">
-          Suggested questions
-        </p>
+      <div className="mt-5">
+        <SectionTitle>Try asking</SectionTitle>
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
               type="button"
-              onClick={() => handleSuggestion(s)}
-              className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1
-                         text-xs text-slate-400 transition-colors hover:border-emerald-700
-                         hover:text-emerald-400"
+              onClick={() => { setQuestion(s); void submit(s); }}
+              className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-400 transition-colors hover:border-violet-700/60 hover:text-violet-300"
             >
               {s}
             </button>
@@ -210,34 +101,44 @@ export default function AskPage() {
         </div>
       </div>
 
-      {/* Results */}
-      {result !== null && (
-        <div className="space-y-4">
-          {/* Generated SQL */}
-          <div>
-            <p className="mb-1 text-xs font-medium uppercase tracking-widest text-slate-600">
-              Generated SQL
-            </p>
-            <pre className="overflow-x-auto rounded-md border border-slate-800 bg-slate-900
-                            p-3 text-xs text-slate-300">
-              {result.sql || '(none)'}
-            </pre>
-            {result.isMock && (
-              <p className="mt-1 text-xs text-slate-600">
-                Running against mock seed data (offline mode).
-              </p>
-            )}
-          </div>
+      {/* Answer */}
+      {loading && (
+        <div className="mt-6 flex items-center gap-2 text-sm text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin text-violet-400" /> Querying your tenant + asking Azure OpenAI...
+        </div>
+      )}
 
-          {/* Row count badge */}
-          {!result.error && (
-            <p className="text-xs text-slate-500">
-              {result.rows.length} row(s) returned
-            </p>
+      {resp && !loading && (
+        <div className="mt-6">
+          {resp.answer ? (
+            <Card className="p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-violet-400" />
+                <span className="text-sm font-semibold text-slate-200">Answer</span>
+                {resp.grounded ? (
+                  <Badge variant="success" dot><Database className="h-3 w-3" /> grounded on live data</Badge>
+                ) : (
+                  <Badge variant="warning">no live data</Badge>
+                )}
+              </div>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{resp.answer}</div>
+            </Card>
+          ) : (
+            <Card className="p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                <div>
+                  <p className="font-semibold text-amber-300">{resp.error ?? 'Could not get an answer'}</p>
+                  {resp.hint && <p className="mt-1 text-sm text-slate-400">{resp.hint}</p>}
+                  {resp.error === 'Azure OpenAI not configured' && (
+                    <pre className="mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">{`AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com
+AZURE_OPENAI_API_KEY=<secret key>
+AZURE_OPENAI_DEPLOYMENT=gpt-4o`}</pre>
+                  )}
+                </div>
+              </div>
+            </Card>
           )}
-
-          {/* Table */}
-          <ResultTable result={result} />
         </div>
       )}
     </div>

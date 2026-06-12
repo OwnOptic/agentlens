@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -30,6 +28,22 @@ import {
   featurePercentages,
   aggregateFeatureBreakdown,
 } from '@/lib/cost/projections';
+import {
+  DollarSign,
+  TrendingUp,
+  Activity,
+  Boxes,
+  Gauge,
+  RefreshCw,
+} from 'lucide-react';
+import {
+  Card,
+  Badge,
+  StatCard,
+  PageHeader,
+  SectionTitle,
+  Button,
+} from '@/components/ui';
 
 interface TopBurner {
   agent: Agent | undefined;
@@ -154,74 +168,63 @@ export default function CostPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8 text-slate-50">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Cost & Capacity</h1>
-        <p className="text-slate-400">
-          Monitor credit consumption, projections, and environment capacity
-        </p>
-        <p className="text-xs text-slate-500 mt-2">
-          Last updated: {new Date(data.timestamp).toLocaleTimeString()}
-        </p>
-      </div>
+    <div className="p-8">
+      <PageHeader
+        icon={DollarSign}
+        title="Cost & Capacity"
+        subtitle="Monitor credit consumption, projections, and environment capacity"
+        tone="emerald"
+        badge={
+          <span className="text-xs text-slate-500">
+            Last updated: {new Date(data.timestamp).toLocaleTimeString()}
+          </span>
+        }
+      />
 
-      {/* Cost Summary Cards */}
+      {/* Cost Summary StatCards */}
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
-          <p className="text-sm font-medium text-slate-400">MTD Cost</p>
-          <p className="text-2xl font-bold text-emerald-400">
-            {formatCost(data.summary.totalMtd)}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">(estimated)</p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
-          <p className="text-sm font-medium text-slate-400">
-            Projected Monthly
-          </p>
-          <p className="text-2xl font-bold text-emerald-400">
-            {formatCost(data.summary.totalProjectedMonthly)}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">(estimated)</p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
-          <p className="text-sm font-medium text-slate-400">
-            7-Day Baseline
-          </p>
-          <p className="text-2xl font-bold text-cyan-400">
-            {formatCost(data.summary.totalBaseline7)}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">(estimated)</p>
-        </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
-          <p className="text-sm font-medium text-slate-400">Active Agents</p>
-          <p className="text-2xl font-bold text-blue-400">
-            {data.summary.agentCount}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">with cost data</p>
-        </div>
+        <StatCard
+          icon={DollarSign}
+          label="MTD Cost"
+          value={formatCost(data.summary.totalMtd)}
+          sublabel="estimated"
+          tone="emerald"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Projected Monthly"
+          value={formatCost(data.summary.totalProjectedMonthly)}
+          sublabel="estimated"
+          tone="sky"
+        />
+        <StatCard
+          icon={Activity}
+          label="7-Day Baseline"
+          value={formatCost(data.summary.totalBaseline7)}
+          sublabel="estimated"
+          tone="violet"
+        />
+        <StatCard
+          icon={Boxes}
+          label="Active Agents"
+          value={data.summary.agentCount}
+          sublabel="with cost data"
+          tone="slate"
+        />
       </div>
 
       {/* Top Burners Table */}
-      <div className="mb-8 rounded-lg border border-slate-700 bg-slate-900 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-white">
-          Top Cost Drivers (Last 7 Days)
-        </h2>
+      <Card className="mb-8 p-6">
+        <SectionTitle icon={TrendingUp}>Top Cost Drivers (Last 7 Days)</SectionTitle>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-slate-700 text-slate-400">
               <tr>
                 <th className="px-4 py-2 text-left font-medium">Agent</th>
                 <th className="px-4 py-2 text-left font-medium">Environment</th>
-                <th className="px-4 py-2 text-right font-medium">
-                  MTD Cost
-                </th>
-                <th className="px-4 py-2 text-right font-medium">
-                  Projected Monthly
-                </th>
-                <th className="px-4 py-2 text-right font-medium">
-                  Avg Daily
-                </th>
+                <th className="px-4 py-2 text-right font-medium">MTD Cost</th>
+                <th className="px-4 py-2 text-right font-medium">Projected Monthly</th>
+                <th className="px-4 py-2 text-right font-medium">Avg Daily</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
@@ -241,13 +244,13 @@ export default function CostPage() {
                   <td className="px-4 py-3 text-slate-400">
                     {burner.agent?.envId || 'N/A'}
                   </td>
-                  <td className="px-4 py-3 text-right text-cyan-400">
+                  <td className="px-4 py-3 text-right text-sky-400">
                     {formatCost(burner.mtdCost)}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-emerald-400">
                     {formatCost(burner.projectedMonthly)}
                   </td>
-                  <td className="px-4 py-3 text-right text-blue-400">
+                  <td className="px-4 py-3 text-right text-slate-300">
                     {formatCost(burner.avgDaily)}
                   </td>
                 </tr>
@@ -255,15 +258,13 @@ export default function CostPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Charts Row */}
       <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Cost Trend */}
-        <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">
-            Daily Cost Trend
-          </h3>
+        <Card className="p-6">
+          <SectionTitle icon={Activity}>Daily Cost Trend</SectionTitle>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -294,13 +295,11 @@ export default function CostPage() {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </Card>
 
         {/* Feature Breakdown */}
-        <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">
-            Feature Breakdown (by credits)
-          </h3>
+        <Card className="p-6">
+          <SectionTitle icon={DollarSign}>Feature Breakdown (by credits)</SectionTitle>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -333,38 +332,28 @@ export default function CostPage() {
               />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </Card>
       </div>
 
       {/* Environment Capacity Gauges */}
-      <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">
-          Environment Capacity
-        </h2>
+      <Card className="mb-8 p-6">
+        <SectionTitle icon={Gauge}>Environment Capacity</SectionTitle>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {data.capacity.map((cap) => {
-            const envName = data.metrics
-              .find((m) => m.envId === cap.envId)
-              ?.envId?.split('-')
-              .slice(1)
-              .join('-') || cap.envId;
+            const envName =
+              data.metrics
+                .find((m) => m.envId === cap.envId)
+                ?.envId?.split('-')
+                .slice(1)
+                .join('-') || cap.envId;
 
             return (
-              <div
-                key={cap.envId}
-                className="rounded-lg border border-slate-700 bg-slate-800 p-4"
-              >
+              <Card key={cap.envId} className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="font-medium text-slate-300">{envName}</p>
-                  <span
-                    className={`text-xs font-semibold px-2 py-1 rounded ${
-                      cap.overage
-                        ? 'bg-red-900 text-red-200'
-                        : 'bg-emerald-900 text-emerald-200'
-                    }`}
-                  >
+                  <Badge variant={cap.overage ? 'critical' : 'success'}>
                     {cap.overage ? 'OVERAGE' : 'OK'}
-                  </span>
+                  </Badge>
                 </div>
                 <div className="mb-2">
                   <div className="flex justify-between mb-1">
@@ -382,28 +371,28 @@ export default function CostPage() {
                         cap.overage
                           ? 'bg-red-500'
                           : cap.pct > 80
-                            ? 'bg-yellow-500'
+                            ? 'bg-amber-500'
                             : 'bg-emerald-500'
                       }`}
                       style={{ width: `${Math.min(cap.pct, 100)}%` }}
                     />
                   </div>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
-      </div>
+      </Card>
 
       {/* Data Note */}
-      <div className="mt-8 rounded-lg border border-slate-700 bg-slate-900/50 p-4">
+      <Card className="p-4">
         <p className="text-xs text-slate-500">
           All costs are <strong>estimated</strong> based on daily metrics and
           Copilot Studio consumption meters. For production usage, consult your
           Power Platform billing dashboard. Capacity overage is triggered when
           creditUsed exceeds creditLimit.
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

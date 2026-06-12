@@ -15,13 +15,31 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  Legend,
   BarChart,
   Bar,
   Cell,
   PieChart,
   Pie,
 } from 'recharts';
+import {
+  LayoutDashboard,
+  Bot,
+  DollarSign,
+  ShieldCheck,
+  Bell,
+  Gauge,
+  Sparkles,
+  TrendingUp,
+  AlertTriangle,
+  Users,
+  Activity,
+  FileText,
+  Download,
+  RefreshCw,
+  Workflow,
+  Network,
+  type LucideIcon,
+} from 'lucide-react';
 
 import { computeExecPosture, type KpiCard, type TrendSeries } from '@/lib/reporting/exec';
 import {
@@ -35,6 +53,15 @@ import {
   mockConversationKpis,
   mockHealthMetrics,
 } from '@/lib/mock/seed';
+import {
+  Card,
+  Badge,
+  StatCard,
+  PageHeader,
+  SectionTitle,
+  Button,
+  type Tone,
+} from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Derive posture once (this is a client component so it runs in the browser)
@@ -52,47 +79,35 @@ const posture = computeExecPosture({
 });
 
 // ---------------------------------------------------------------------------
-// Sentiment -> colour mapping (Tailwind dark-theme)
+// KPI id -> icon + tone mapping
 // ---------------------------------------------------------------------------
-const sentimentBorder: Record<KpiCard['sentiment'], string> = {
-  positive: 'border-emerald-500',
-  negative: 'border-red-500',
-  warning: 'border-amber-400',
-  neutral: 'border-slate-600',
+const KPI_META: Record<string, { icon: LucideIcon; tone: Tone }> = {
+  'total-agents':      { icon: Bot,          tone: 'emerald' },
+  'daily-cost':        { icon: DollarSign,   tone: 'amber'   },
+  'compliance-score':  { icon: ShieldCheck,  tone: 'sky'     },
+  'open-alerts':       { icon: Bell,         tone: 'red'     },
+  'capacity-overage':  { icon: Gauge,        tone: 'amber'   },
+  'maturity-score':    { icon: Sparkles,     tone: 'violet'  },
+  'deflection-rate':   { icon: TrendingUp,   tone: 'emerald' },
+  'avg-error-rate':    { icon: Activity,     tone: 'red'     },
+  'orphan-agents':     { icon: Users,        tone: 'amber'   },
 };
 
-const sentimentText: Record<KpiCard['sentiment'], string> = {
-  positive: 'text-emerald-400',
-  negative: 'text-red-400',
-  warning: 'text-amber-400',
-  neutral: 'text-slate-300',
+// sentiment -> StatCard delta prop
+const SENTIMENT_DELTA: Record<KpiCard['sentiment'], 'up' | 'down' | 'flat'> = {
+  positive: 'up',
+  negative: 'down',
+  warning:  'flat',
+  neutral:  'flat',
 };
 
-const trendIcon: Record<NonNullable<KpiCard['trend']>, string> = {
-  up: '↑',
-  down: '↓',
-  flat: '→',
+// sentiment -> tone override when the KPI_META tone should be colored by status
+const SENTIMENT_TONE: Record<KpiCard['sentiment'], Tone> = {
+  positive: 'emerald',
+  negative: 'red',
+  warning:  'amber',
+  neutral:  'slate',
 };
-
-// ---------------------------------------------------------------------------
-// KPI Card component
-// ---------------------------------------------------------------------------
-function KpiCardBox({ card }: { card: KpiCard }) {
-  return (
-    <div
-      className={`rounded-xl border-l-4 bg-slate-800 p-4 shadow-sm flex flex-col gap-1 ${sentimentBorder[card.sentiment]}`}
-    >
-      <p className="text-xs font-medium tracking-wide text-slate-400 uppercase">{card.label}</p>
-      <p className={`text-2xl font-bold tabular-nums ${sentimentText[card.sentiment]}`}>
-        {String(card.value)}
-        {card.trend && (
-          <span className="ml-2 text-base opacity-70">{trendIcon[card.trend]}</span>
-        )}
-      </p>
-      {card.unit && <p className="text-xs text-slate-500">{card.unit}</p>}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Trend chart component
@@ -107,7 +122,7 @@ function TrendLineChart({
   yFormat?: (v: number) => string;
 }) {
   return (
-    <div className="rounded-xl bg-slate-800 p-4 shadow-sm">
+    <Card className="p-4">
       <h3 className="mb-3 text-sm font-semibold text-slate-300">{series.label}</h3>
       <ResponsiveContainer width="100%" height={180}>
         <LineChart data={series.data} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
@@ -141,7 +156,7 @@ function TrendLineChart({
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   );
 }
 
@@ -156,7 +171,7 @@ function CapacityChart() {
   }));
 
   return (
-    <div className="rounded-xl bg-slate-800 p-4 shadow-sm">
+    <Card className="p-4">
       <h3 className="mb-3 text-sm font-semibold text-slate-300">Credit Capacity by Environment</h3>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={data} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
@@ -183,7 +198,7 @@ function CapacityChart() {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   );
 }
 
@@ -204,7 +219,7 @@ function LifecyclePieChart() {
   }));
 
   return (
-    <div className="rounded-xl bg-slate-800 p-4 shadow-sm">
+    <Card className="p-4">
       <h3 className="mb-3 text-sm font-semibold text-slate-300">Agent Lifecycle Distribution</h3>
       <div className="flex items-center gap-4">
         <ResponsiveContainer width={140} height={140}>
@@ -246,7 +261,7 @@ function LifecyclePieChart() {
           ))}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -259,7 +274,7 @@ function MaturityScoreCard() {
   const color = score >= 3 ? '#10b981' : score >= 2 ? '#f59e0b' : '#ef4444';
 
   return (
-    <div className="rounded-xl bg-slate-800 p-4 shadow-sm flex flex-col items-center justify-center gap-3">
+    <Card className="p-4 flex flex-col items-center justify-center gap-3">
       <h3 className="text-sm font-semibold text-slate-300">Maturity Score</h3>
       <div className="relative flex h-24 w-24 items-center justify-center">
         <svg viewBox="0 0 36 36" className="h-24 w-24 -rotate-90">
@@ -283,7 +298,7 @@ function MaturityScoreCard() {
         </span>
       </div>
       <p className="text-xs text-slate-500">out of 4.0</p>
-    </div>
+    </Card>
   );
 }
 
@@ -294,61 +309,53 @@ export default function OverviewPage() {
   const { kpiCards, costTrend, sessionTrend, deflectionTrend, errorRateTrend } = posture;
 
   return (
-    <main className="min-h-screen bg-slate-900 p-6 text-slate-100">
-      {/* Header */}
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Executive Overview</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Tenant posture snapshot - mock data - generated{' '}
-            <span className="text-slate-300">{posture.generatedAt.slice(0, 10)}</span>
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <a
-            href="/api/report?format=json"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-600 transition-colors"
-          >
-            JSON
-          </a>
-          <a
-            href="/api/report?format=markdown"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-600 transition-colors"
-          >
-            MD
-          </a>
-          <a
-            href="/api/report?format=html"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 transition-colors"
-          >
-            HTML Report
-          </a>
-        </div>
-      </div>
+    <div className="p-8">
+      <PageHeader
+        icon={LayoutDashboard}
+        title="Executive Overview"
+        subtitle={`Tenant posture snapshot - mock data - generated ${posture.generatedAt.slice(0, 10)}`}
+        badge={<Badge variant="neutral">Mock data</Badge>}
+        actions={
+          <>
+            <Button icon={FileText} href="/api/report?format=json" target="_blank" rel="noreferrer" variant="ghost">
+              JSON
+            </Button>
+            <Button icon={RefreshCw} href="/api/report?format=markdown" target="_blank" rel="noreferrer" variant="ghost">
+              MD
+            </Button>
+            <Button icon={Download} href="/api/report?format=html" target="_blank" rel="noreferrer" variant="primary">
+              HTML Report
+            </Button>
+          </>
+        }
+        tone="emerald"
+      />
 
       {/* KPI Cards grid */}
       <section className="mb-8">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Key Performance Indicators
-        </h2>
+        <SectionTitle icon={Sparkles}>Key Performance Indicators</SectionTitle>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {kpiCards.map((card) => (
-            <KpiCardBox key={card.id} card={card} />
-          ))}
+          {kpiCards.map((card) => {
+            const meta = KPI_META[card.id] ?? { icon: Activity, tone: 'slate' as Tone };
+            const tone: Tone = SENTIMENT_TONE[card.sentiment];
+            return (
+              <StatCard
+                key={card.id}
+                icon={meta.icon}
+                label={card.label}
+                value={String(card.value)}
+                sublabel={card.unit}
+                delta={SENTIMENT_DELTA[card.sentiment]}
+                tone={tone}
+              />
+            );
+          })}
         </div>
       </section>
 
       {/* Trend charts - row 1: cost + sessions */}
       <section className="mb-6">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Trends
-        </h2>
+        <SectionTitle icon={TrendingUp}>Trends</SectionTitle>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <TrendLineChart
             series={costTrend}
@@ -380,6 +387,7 @@ export default function OverviewPage() {
 
       {/* Bottom row: capacity + lifecycle + maturity */}
       <section className="mb-6">
+        <SectionTitle icon={Gauge}>Environment Health</SectionTitle>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="md:col-span-1">
             <CapacityChart />
@@ -395,92 +403,84 @@ export default function OverviewPage() {
 
       {/* Capacity detail table */}
       <section className="mb-6">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Environment Capacity Detail
-        </h2>
-        <div className="overflow-x-auto rounded-xl bg-slate-800 shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700">
-                {['Environment', 'Credits Used', 'Credit Limit', 'Usage %', 'Status'].map(
-                  (h) => (
+        <SectionTitle icon={Network}>Environment Capacity Detail</SectionTitle>
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-800">
+                  {['Environment', 'Credits Used', 'Credit Limit', 'Usage %', 'Status'].map((h) => (
                     <th
                       key={h}
-                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400"
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
                     >
                       {h}
                     </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {posture.capacityRows.map((row) => (
-                <tr
-                  key={row.envId}
-                  className="border-b border-slate-700/50 last:border-0 hover:bg-slate-700/40 transition-colors"
-                >
-                  <td className="px-4 py-3 font-medium text-slate-200">{row.envName}</td>
-                  <td className="px-4 py-3 tabular-nums text-slate-300">
-                    {row.creditUsed.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-slate-300">
-                    {row.creditLimit.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-700">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: `${Math.min(row.pct, 100)}%`,
-                            background: row.overage
-                              ? '#ef4444'
-                              : row.pct >= 80
-                                ? '#f59e0b'
-                                : '#10b981',
-                          }}
-                        />
-                      </div>
-                      <span
-                        className={
-                          row.overage
-                            ? 'text-red-400'
-                            : row.pct >= 80
-                              ? 'text-amber-400'
-                              : 'text-emerald-400'
-                        }
-                      >
-                        {row.pct.toFixed(1)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {row.overage ? (
-                      <span className="rounded-full bg-red-900/50 px-2 py-0.5 text-xs font-medium text-red-400">
-                        OVERAGE
-                      </span>
-                    ) : row.pct >= 80 ? (
-                      <span className="rounded-full bg-amber-900/50 px-2 py-0.5 text-xs font-medium text-amber-400">
-                        Near limit
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-emerald-900/50 px-2 py-0.5 text-xs font-medium text-emerald-400">
-                        OK
-                      </span>
-                    )}
-                  </td>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {posture.capacityRows.map((row) => (
+                  <tr
+                    key={row.envId}
+                    className="border-b border-slate-800/50 last:border-0 transition-colors hover:bg-slate-800/30"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-200">{row.envName}</td>
+                    <td className="px-4 py-3 tabular-nums text-slate-300">
+                      {row.creditUsed.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-slate-300">
+                      {row.creditLimit.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-700">
+                          <div
+                            className="h-2 rounded-full"
+                            style={{
+                              width: `${Math.min(row.pct, 100)}%`,
+                              background: row.overage
+                                ? '#ef4444'
+                                : row.pct >= 80
+                                  ? '#f59e0b'
+                                  : '#10b981',
+                            }}
+                          />
+                        </div>
+                        <span
+                          className={
+                            row.overage
+                              ? 'text-red-400'
+                              : row.pct >= 80
+                                ? 'text-amber-400'
+                                : 'text-emerald-400'
+                          }
+                        >
+                          {row.pct.toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.overage ? (
+                        <Badge variant="critical">OVERAGE</Badge>
+                      ) : row.pct >= 80 ? (
+                        <Badge variant="warning">Near limit</Badge>
+                      ) : (
+                        <Badge variant="success">OK</Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </section>
 
       {/* Footer */}
       <footer className="mt-8 text-center text-xs text-slate-600" suppressHydrationWarning>
         AgentLens v2 - Mock seed data - {posture.generatedAt}
       </footer>
-    </main>
+    </div>
   );
 }

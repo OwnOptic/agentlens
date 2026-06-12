@@ -14,6 +14,21 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import type { Alert, AlertSeverity, AlertType } from '@/lib/types';
+import {
+  Bell,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle,
+  ShieldCheck,
+} from 'lucide-react';
+import {
+  Card,
+  Badge,
+  StatCard,
+  PageHeader,
+  SectionTitle,
+  Button,
+} from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,17 +49,7 @@ interface RunResult {
 // Helpers / style maps
 // ---------------------------------------------------------------------------
 
-const SEVERITY_BADGE: Record<AlertSeverity, string> = {
-  critical: 'bg-red-700 text-red-100 border border-red-600',
-  warning:  'bg-yellow-700 text-yellow-100 border border-yellow-600',
-  info:     'bg-blue-700 text-blue-100 border border-blue-600',
-};
-
-const STATE_BADGE: Record<AlertState, string> = {
-  open:     'bg-red-900/50 text-red-300 border border-red-800',
-  ack:      'bg-yellow-900/50 text-yellow-300 border border-yellow-800',
-  resolved: 'bg-emerald-900/50 text-emerald-300 border border-emerald-800',
-};
+const SEVERITY_ORDER: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
 
 const TYPE_LABEL: Record<AlertType, string> = {
   budget_breach:         'Budget Breach',
@@ -53,8 +58,6 @@ const TYPE_LABEL: Record<AlertType, string> = {
   model_meter_mismatch:  'Meter Mismatch',
   orphan_idle:           'Orphan / Idle',
 };
-
-const SEVERITY_ORDER: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -66,14 +69,6 @@ function formatDate(iso: string): string {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function Badge({ className, children }: { className: string; children: React.ReactNode }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${className}`}>
-      {children}
-    </span>
-  );
-}
 
 function Spinner() {
   return (
@@ -110,13 +105,20 @@ function AlertRow({
   onAck: (id: string) => void;
   onResolve: (id: string) => void;
 }) {
+  const severityVariant =
+    alert.severity === 'critical' ? 'critical' :
+    alert.severity === 'warning'  ? 'warning'  : 'info';
+
+  const stateVariant =
+    alert.state === 'open'     ? 'critical' :
+    alert.state === 'ack'      ? 'warning'  : 'success';
+
   return (
-    <div
+    <Card
+      hover
       className={[
-        'flex flex-col gap-2 rounded-lg border p-4 transition-colors',
-        selected
-          ? 'border-emerald-600 bg-slate-800'
-          : 'border-slate-700 bg-slate-800/70 hover:border-slate-600',
+        'p-4 transition-colors',
+        selected ? 'ring-1 ring-emerald-600' : '',
       ].join(' ')}
     >
       {/* Header row */}
@@ -130,13 +132,13 @@ function AlertRow({
         />
 
         <div className="flex flex-1 flex-wrap items-center gap-2">
-          <Badge className={SEVERITY_BADGE[alert.severity]}>
+          <Badge variant={severityVariant}>
             {alert.severity.toUpperCase()}
           </Badge>
-          <Badge className="bg-slate-700 text-slate-300 border border-slate-600">
+          <Badge variant="neutral">
             {TYPE_LABEL[alert.type] ?? alert.type}
           </Badge>
-          <Badge className={STATE_BADGE[alert.state]}>
+          <Badge variant={stateVariant}>
             {alert.state}
           </Badge>
         </div>
@@ -144,29 +146,30 @@ function AlertRow({
         {/* Action buttons */}
         <div className="flex shrink-0 gap-2">
           {alert.state === 'open' && (
-            <button
+            <Button
+              variant="ghost"
               onClick={() => onAck(alert.id)}
-              className="rounded px-2.5 py-1 text-xs font-medium bg-yellow-900/40 text-yellow-300 hover:bg-yellow-900/70 border border-yellow-800 transition-colors"
             >
               Ack
-            </button>
+            </Button>
           )}
           {alert.state !== 'resolved' && (
-            <button
+            <Button
+              variant="primary"
+              icon={CheckCircle}
               onClick={() => onResolve(alert.id)}
-              className="rounded px-2.5 py-1 text-xs font-medium bg-emerald-900/40 text-emerald-300 hover:bg-emerald-900/70 border border-emerald-800 transition-colors"
             >
               Resolve
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {/* Message */}
-      <p className="ml-7 text-sm text-slate-200">{alert.message}</p>
+      <p className="ml-7 mt-2 text-sm text-slate-200">{alert.message}</p>
 
       {/* Footer metadata */}
-      <div className="ml-7 flex flex-wrap gap-4 text-xs text-slate-500">
+      <div className="ml-7 mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
         <span>
           <span className="text-slate-400">Env:</span>{' '}
           <code className="text-slate-300">{alert.envId}</code>
@@ -182,7 +185,7 @@ function AlertRow({
           {formatDate(alert.createdAt)}
         </span>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -198,17 +201,10 @@ function StatsBar({ alerts }: { alerts: Alert[] }) {
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
-      {[
-        { label: 'Open',     value: total,    cls: 'border-slate-700 text-white' },
-        { label: 'Critical', value: critical, cls: 'border-red-700 text-red-300' },
-        { label: 'Warning',  value: warning,  cls: 'border-yellow-700 text-yellow-300' },
-        { label: 'Info',     value: info,     cls: 'border-blue-700 text-blue-300' },
-      ].map(({ label, value, cls }) => (
-        <div key={label} className={`rounded-lg border ${cls} bg-slate-800/50 p-4`}>
-          <p className="text-2xl font-bold">{value}</p>
-          <p className="text-xs uppercase tracking-widest text-slate-400 mt-0.5">{label}</p>
-        </div>
-      ))}
+      <StatCard icon={Bell}          label="Open"     value={total}    tone="slate" />
+      <StatCard icon={AlertTriangle} label="Critical" value={critical} tone="red" />
+      <StatCard icon={AlertTriangle} label="Warning"  value={warning}  tone="amber" />
+      <StatCard icon={Bell}          label="Info"     value={info}     tone="sky" />
     </div>
   );
 }
@@ -367,7 +363,7 @@ export default function AlertsPage() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="min-h-screen text-white">
+    <div className="p-8">
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-medium shadow-lg text-white">
@@ -375,27 +371,28 @@ export default function AlertsPage() {
         </div>
       )}
 
-      {/* Page header */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Governance Alerts</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Automated rule evaluations across all environments and agents.
-          </p>
-        </div>
-        <button
-          onClick={() => void runEvaluation()}
-          disabled={running}
-          className="flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
-        >
-          {running ? <Spinner /> : (
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          )}
-          {running ? 'Evaluating...' : 'Re-evaluate Rules'}
-        </button>
-      </div>
+      <PageHeader
+        icon={Bell}
+        title="Governance Alerts"
+        subtitle="Automated rule evaluations across all environments and agents."
+        tone="amber"
+        actions={
+          <Button
+            variant="primary"
+            icon={running ? undefined : RefreshCw}
+            onClick={() => void runEvaluation()}
+          >
+            {running ? (
+              <span className="flex items-center gap-2">
+                <Spinner />
+                Evaluating...
+              </span>
+            ) : (
+              'Re-evaluate Rules'
+            )}
+          </Button>
+        }
+      />
 
       {/* Stats */}
       {!loading && <StatsBar alerts={alerts} />}
@@ -431,29 +428,23 @@ export default function AlertsPage() {
 
       {/* Bulk toolbar */}
       {selected.size > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-700 bg-emerald-900/20 px-4 py-2.5">
+        <Card className="mb-4 flex flex-wrap items-center gap-3 px-4 py-2.5 ring-1 ring-emerald-700">
           <span className="text-sm font-medium text-emerald-300">
             {selected.size} selected
           </span>
-          <button
-            onClick={() => void bulkAction('ack')}
-            className="rounded px-3 py-1 text-xs font-medium bg-yellow-900/50 text-yellow-300 hover:bg-yellow-900 border border-yellow-800 transition-colors"
-          >
+          <Button variant="ghost" onClick={() => void bulkAction('ack')}>
             Bulk Ack
-          </button>
-          <button
-            onClick={() => void bulkAction('resolve')}
-            className="rounded px-3 py-1 text-xs font-medium bg-emerald-900/50 text-emerald-300 hover:bg-emerald-900 border border-emerald-800 transition-colors"
-          >
+          </Button>
+          <Button variant="primary" icon={CheckCircle} onClick={() => void bulkAction('resolve')}>
             Bulk Resolve
-          </button>
+          </Button>
           <button
             onClick={clearSelection}
             className="ml-auto text-xs text-slate-500 hover:text-slate-300"
           >
             Clear selection
           </button>
-        </div>
+        </Card>
       )}
 
       {/* Select-all control */}
@@ -472,15 +463,17 @@ export default function AlertsPage() {
 
       {/* Error state */}
       {error && (
-        <div className="mb-4 rounded-lg border border-red-700 bg-red-900/20 px-4 py-3 text-sm text-red-300">
-          {error}
-          <button
-            onClick={() => void fetchAlerts()}
-            className="ml-3 underline hover:no-underline"
-          >
-            Retry
-          </button>
-        </div>
+        <Card className="mb-4 border-red-800 px-4 py-3">
+          <p className="text-sm text-red-300">
+            {error}
+            <button
+              onClick={() => void fetchAlerts()}
+              className="ml-3 underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </p>
+        </Card>
       )}
 
       {/* Loading state */}
@@ -493,15 +486,13 @@ export default function AlertsPage() {
 
       {/* Empty state */}
       {!loading && !error && alerts.length === 0 && (
-        <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-12 text-center">
-          <svg className="mx-auto mb-4 h-10 w-10 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+        <Card className="p-12 text-center">
+          <ShieldCheck className="mx-auto mb-4 h-10 w-10 text-slate-600" />
           <p className="text-sm font-medium text-slate-400">No alerts match the current filters.</p>
           <p className="mt-1 text-xs text-slate-600">
             Run an evaluation or adjust filters to see results.
           </p>
-        </div>
+        </Card>
       )}
 
       {/* Alert list */}
