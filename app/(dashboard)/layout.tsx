@@ -143,14 +143,35 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   );
 }
 
+// Routes that show REAL tenant data - everything else is demo seed data.
+const REAL_DATA_ROUTES = ['/live', '/discovery', '/ask'];
+
+function DemoBanner() {
+  return (
+    <div className="sticky top-0 z-20 flex items-center justify-center gap-2 border-b border-amber-500/40 bg-amber-500/15 px-4 py-2 text-center text-xs font-medium text-amber-300 backdrop-blur">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <span>
+        <strong>DEMO DATA</strong> - sample figures, <strong>not your tenant</strong>. Real data is only on{' '}
+        <span className="text-amber-200">Live (MVP)</span>, <span className="text-amber-200">Agent Discovery</span>, and{' '}
+        <span className="text-amber-200">Ask (AI)</span>.
+      </span>
+    </div>
+  );
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
+  const isDemo = !REAL_DATA_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
   return (
     <div className="flex min-h-screen bg-slate-950 text-white selection:bg-emerald-500/30">
       {/* subtle ambient gradient */}
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(60rem_40rem_at_120%_-10%,rgba(16,185,129,0.06),transparent)]" />
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-      <main className="relative flex-1 overflow-auto">{children}</main>
+      <main className="relative flex-1 overflow-auto">
+        {isDemo && <DemoBanner />}
+        {children}
+      </main>
     </div>
   );
 }

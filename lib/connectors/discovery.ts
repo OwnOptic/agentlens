@@ -112,19 +112,21 @@ async function discoverM365(): Promise<DiscoverySource> {
   const token = process.env.MVP_GRAPH_TOKEN;
   if (!token) return base;
   try {
-    const res = await fetch('https://graph.microsoft.com/beta/admin/copilot/copilotPackages', {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    });
+    // Package Management API - REQUIRES a Microsoft Agent 365 license (else 403).
+    const res = await fetch(
+      "https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$filter=supportedHosts/any(h:h eq 'Copilot')",
+      { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+    );
+    if (res.status === 403) throw new Error('403 - requires a Microsoft Agent 365 license (AI Admin + CopilotPackages.Read.All)');
     if (!res.ok) throw new Error(`Graph ${res.status}`);
     const json = await res.json();
     const items: Record<string, unknown>[] = json.value ?? [];
     const agents: UnifiedAgent[] = items.map((it) => ({
-      id: String(it.id ?? it.packageId ?? ''),
+      id: String(it.id ?? ''),
       name: String(it.displayName ?? it.name ?? 'Unknown'),
       platform: 'm365_declarative',
-      owner: (it.publisher as string) ?? null,
-      location: 'Microsoft 365',
+      owner: (it.publisherName ?? it.publisher) as string ?? null,
+      location: Array.isArray(it.elementTypes) ? (it.elementTypes as string[]).join(', ') : 'Microsoft 365',
       source: 'graph-copilotPackages',
       details: it,
     }));
