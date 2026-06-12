@@ -478,7 +478,7 @@ export default function OverviewPage() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-8 text-center text-xs text-slate-600">
+      <footer className="mt-8 text-center text-xs text-slate-600" suppressHydrationWarning>
         AgentLens v2 - Mock seed data - {posture.generatedAt}
       </footer>
     </main>
