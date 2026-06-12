@@ -1,49 +1,93 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { runIngestion } from '@/lib/ingestion/orchestrator';
-
 /**
  * POST /api/ingest
  *
- * Ingestion API endpoint. Guards access via CRON_SECRET header,
- * triggers the orchestrator, and returns the IngestionRun as JSON.
+ * Triggers the full AgentLens ingestion pipeline.
+ * Intended to be called by a trusted cron/scheduler (e.g. Vercel Cron, GitHub Actions).
  *
  * Security:
- * - Requires CRON_SECRET header matching environment variable
- * - Should only be called by trusted cron/scheduler services
+ *   - Requires the `x-cron-secret` header to match the CRON_SECRET env var.
+ *   - Returns 403 if the secret is missing or incorrect.
  *
- * Response:
- * - 200 OK with IngestionRun JSON on success
- * - 403 Forbidden if CRON_SECRET is invalid or missing
- * - 500 Internal Server Error if orchestration fails fatally
+ * Responses:
+ *   200  { run: IngestionRun }         - pipeline completed (success or partial)
+ *   400  { error: string }             - malformed request
+ *   403  { error: string }             - invalid or missing secret
+ *   500  { error: string, details? }   - unexpected server error
+ *
+ * If CRON_SECRET is not configured the endpoint is disabled (returns 403) to
+ * prevent accidental exposure.
  */
+
+import { NextRequest, NextResponse } from 'next/server';
+import type { IngestionRun } from '@/lib/types';
+import { runIngestion } from '@/lib/ingestion/orchestrator';
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    // TODO: Extract CRON_SECRET from request headers
-    const cronSecret = request.headers.get('CRON_SECRET');
-
-    // TODO: Validate CRON_SECRET against environment variable
-    const expectedSecret = process.env.CRON_SECRET;
-
-    if (!cronSecret || cronSecret !== expectedSecret) {
-      return NextResponse.json(
-        { error: 'Unauthorized: invalid or missing CRON_SECRET' },
-        { status: 403 }
-      );
-    }
-
-    // TODO: Call runIngestion() to orchestrate the full ingestion pipeline
-    const run = await runIngestion();
-
-    // TODO: Return the IngestionRun as JSON with 200 status
-    return NextResponse.json(run, { status: 200 });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Unknown error';
-    console.error('[/api/ingest] Error:', message);
-
+  // Guard: CRON_SECRET must be configured
+  const expectedSecret = process.env.CRON_SECRET;
+  if (!expectedSecret) {
     return NextResponse.json(
-      { error: 'Internal server error', details: message },
-      { status: 500 }
+      { error: 'Endpoint disabled: CRON_SECRET is not configured on this deployment.' },
+      { status: 403 },
     );
   }
+
+  // Accept the secret from either `x-cron-secret` or the legacy `CRON_SECRET` header
+  const providedSecret =
+    request.headers.get('x-cron-secret') ??
+    request.headers.get('CRON_SECRET');
+
+  if (!providedSecret || providedSecret !== expectedSecret) {
+    return NextResponse.json(
+      { error: 'Forbidden: invalid or missing cron secret.' },
+      { status: 403 },
+    );
+  }
+
+  try {
+    const run: IngestionRun = await runIngestion();
+
+    // Use 200 for both success and partial so the caller can inspect the body
+    const statusCode = run.status === 'failed' ? 500 : 200;
+
+    return NextResponse.json({ run }, { status: statusCode });
+  } catch (e) {
+    const details = e instanceof Error ? e.message : String(e);
+    console.error('[POST /api/ingest] Unhandled error:', details);
+    return NextResponse.json(
+      { error: 'Internal server error', details },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * GET /api/ingest
+ *
+ * Health-check endpoint - returns the current pipeline configuration state
+ * without running ingestion. Safe to call unauthenticated.
+ */
+export async function GET(_request: NextRequest): Promise<NextResponse> {
+  const configured = Boolean(
+    process.env.AZURE_CLIENT_ID &&
+      process.env.AZURE_CLIENT_SECRET &&
+      process.env.AZURE_TENANT_ID,
+  );
+  const supabaseConfigured = Boolean(
+    process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY,
+  );
+  const appInsightsConfigured = Boolean(process.env.APPINSIGHTS_WORKSPACE_ID);
+  const cronConfigured = Boolean(process.env.CRON_SECRET);
+
+  return NextResponse.json({
+    status: 'ok',
+    mode: configured ? 'live' : 'mock',
+    connectors: {
+      azureAd: configured,
+      supabase: supabaseConfigured,
+      appInsights: appInsightsConfigured,
+      billingPolicy: Boolean(process.env.PPAC_BILLING_POLICY_ID),
+    },
+    cronConfigured,
+  });
 }

@@ -38,3 +38,7 @@ yarn-error.log*
 
 # coverage
 /coverage
+
+# agent + build artifacts
+.claude/
+BUILD_SUMMARY.txt

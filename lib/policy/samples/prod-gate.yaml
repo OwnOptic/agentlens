@@ -1,0 +1,41 @@
+---
+name: prod-promotion-gate
+version: "1.0"
+# Rules evaluated when promoting an agent to Production lifecycle.
+# blocking: true  -> verdict becomes 'block' if condition fails
+# blocking: false -> advisory warning only (verdict stays 'pass')
+rules:
+  - id: no_anon_auth
+    description: Agent must not use anonymous authentication in Production
+    condition: agent.authMode != "anonymous"
+    blocking: true
+
+  - id: owner_required
+    description: Agent must have a registered owner email
+    condition: agent.ownerEmail != null
+    blocking: true
+
+  - id: dlp_reviewed
+    description: Agent must have passed DLP review before production deployment
+    condition: agent.dlpReviewed == true
+    blocking: true
+
+  - id: http_connector_approved
+    description: HTTP connector usage requires explicit approval in Production
+    condition: agent.httpApproved == true
+    blocking: true
+
+  - id: lifecycle_not_poc
+    description: Agent must not still be marked as PoC when entering Production
+    condition: agent.lifecycle != "poc"
+    blocking: true
+
+  - id: maturity_security_score
+    description: Security pillar average maturity score should be >= 3 (advisory)
+    condition: maturity.securityAvg >= 3
+    blocking: false
+
+  - id: no_open_critical_violations
+    description: No open critical compliance violations (advisory)
+    condition: compliance.criticalViolationsCount == 0
+    blocking: false

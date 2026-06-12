@@ -1,155 +1,53 @@
-# AgentLens
+# AgentLens v2
 
-**Single-tenant Copilot agent governance and observability webapp.**
+**Single-tenant Copilot agent governance and observability platform — powered by Azure Resource Graph.**
 
-AgentLens surfaces all Copilot Studio agents across your Power Platform environments in one dashboard. Track daily cost, usage, messages, and alerts - and apply governance controls with a fraction of the complexity of CoE Kit or Copilot Studio Kit.
+AgentLens surfaces all Copilot Studio agents across your entire Power Platform estate in one unified dashboard. Track credit cost, capacity, compliance, maturity, and health — with intelligent alerting, release gates, and policy-as-code controls.
 
 ## What is AgentLens?
 
-- **Agent inventory** - See every Copilot Studio agent in every environment at a glance.
-- **Daily metrics** - Message count, session count, estimated LLM cost, grouped by agent and date.
-- **Governance alerts** - Budget breaches, volume spikes, new agents in default environments, model meter mismatches, orphaned/idle agents.
-- **Single-tenant** - Designed for one organization (one Entra tenant) to govern its own agent fleet.
+- **Complete agent inventory** - Every Copilot Studio agent across all environments, via Azure Resource Graph
+- **Credit and capacity analytics** - Per-feature cost breakdown, capacity tracking, overage detection
+- **Proactive alerting** - Budget breaches, volume spikes, compliance violations, risky patterns
+- **Compliance engine** - Configurable rules, violation tracking, risk-pattern detection
+- **Maturity assessment** - 0-4 scoring across security, management, and reporting pillars
+- **Release gates with policy-as-code** - YAML-based policies, signed decisions, audit trail
+- **Conversation KPIs and health** - Deflection rates, latency, error tracking via App Insights
+- **Single-tenant** - One app instance per Entra tenant; installs in <5 minutes
 
-## 4-Step Install
+## Quick Start
 
-### Step 1: Deploy the Web App
+See [docs/INSTALL.md](docs/INSTALL.md) for the full 4-step installation guide.
 
-Deploy the Next.js app to your hosting platform (Vercel, Azure App Service, etc.):
+**TL;DR:**
+1. Deploy the web app (`npm install && npm run build && npm start`)
+2. Create an Entra app registration with ARG read permission
+3. Run the optional provision script (sets up legacy deep-scan if needed)
+4. Set environment variables and launch
 
-```bash
-npm install
-npm run build
-npm start
-```
+For architecture details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-Or use the Vercel CLI:
+## How It Works
 
-```bash
-vercel deploy
-```
+**Backbone:** Azure Resource Graph (`PowerPlatformResources` queries) provides whole-tenant agent inventory in a single call — no per-environment polling, no Dataverse import.
 
-Secure the app with your preferred authentication (e.g., Entra ID Single Sign-On via MSAL).
+**Cost & Capacity:** PPAC Licensing API for per-agent credit metrics, with CSV fallback and feature breakdown (generative answers, agent actions, flows, text tools).
 
-### Step 2: Register an Entra App + Consent
+**Governance Stack:** Configurable compliance rules, risky-pattern detection, maturity scoring (0-4 across 3 pillars), and policy-as-code release gates with signed audit records.
 
-Create a new app registration in Azure Entra ID:
+**Alerts & KPIs:** Proactive Teams/email notifications for budget, spikes, overage, compliance. Conversation KPI aggregates and App Insights health metrics (no message content).
 
-1. Go to **Azure Portal > Entra ID > App registrations > New registration**
-2. Name: `AgentLens` (or your choice)
-3. Supported account types: `Accounts in this organizational directory only`
-4. Redirect URI: `Web > https://<your-app-domain>/callback` (or the auth callback of your deployment)
-5. After creation, go to **API permissions**:
-   - Add `Dataverse` (find in "APIs my organization uses") and grant:
-     - `user_impersonation` (delegated)
-   - Add `Microsoft Graph` and grant:
-     - `Environment.Read.All` (delegated)
-6. Click **Grant admin consent for [org]** to pre-consent for all users
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
 
-**Save the Client ID and Tenant ID** - you'll need these in Step 4.
+## Configuration
 
-### Step 3: Run the Provision Script
+All configuration happens in the **Settings > Setup Wizard** page. The wizard guides you through:
+1. Tenant ID (Entra tenant)
+2. Client ID (app registration)
+3. Teams webhook URL (for alerts, optional)
+4. Custom thresholds (budget, escalation)
 
-The provision script adds a read-only app-user (service principal) to each Power Platform environment, so AgentLens can read agents and metrics without impersonating users.
-
-```bash
-npx ts-node scripts/provision-app-user.ts \
-  --tenant-id <tenant-id> \
-  --client-id <client-id> \
-  --environments "prod,dev,staging" \
-  --dry-run false
-```
-
-Options:
-- `--tenant-id` - Your Entra tenant ID
-- `--client-id` - The app registration Client ID from Step 2
-- `--environments` - Comma-separated list of environment FQDNs (e.g., `contoso-prod.crm.dynamics.com`)
-- `--dry-run` - Set to `false` to actually add users; `true` to preview
-
-The script:
-1. Authenticates as the app registration (client credentials flow)
-2. For each environment, adds the service principal as an application user
-3. Assigns a least-privilege read-only security role
-4. Is idempotent - running twice is safe
-
-### Step 4: Configure Environment Variables
-
-Create a `.env.local` file (or set via your deployment platform):
-
-```env
-NEXT_PUBLIC_TENANT_ID=<tenant-id>
-NEXT_PUBLIC_CLIENT_ID=<client-id>
-NEXT_PUBLIC_APP_URL=https://<your-app-domain>
-
-# Dataverse API endpoint (example for US)
-DATAVERSE_API_ENDPOINT=https://[environment-url]/api/data/v9.2
-
-# Optional: Supabase (for metrics storage)
-NEXT_PUBLIC_SUPABASE_URL=https://[project].supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-
-# Optional: feature flags
-FEATURE_ALERTS_ENABLED=true
-FEATURE_METRICS_INGESTION=true
-```
-
-Restart the app and verify it connects to your environments.
-
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      AgentLens (Next.js)                 │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │  Client (React)                                    │ │
-│  │  - Dashboard (agents, metrics, alerts)            │ │
-│  │  - Environment selector                           │ │
-│  │  - Governance rules UI                            │ │
-│  └────────────────────────────────────────────────────┘ │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │  API Routes (Next.js /api)                         │ │
-│  │  - /api/agents         (read from Dataverse)      │ │
-│  │  - /api/metrics        (read from Dataverse/DB)   │ │
-│  │  - /api/alerts         (read from Supabase)       │ │
-│  │  - /api/ingest         (write metrics to DB)      │ │
-│  └────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-         │                           │
-         ├──── Microsoft Graph (Read: Environments)
-         │
-         └──── Dataverse Web API (Read: Agents & Metrics)
-                  └─ Service Principal (app-user in each env)
-```
-
-### Key Components
-
-| Layer | Role |
-|-------|------|
-| **Client** | React + Zustand state, TailwindCSS styling, Recharts dashboards |
-| **API Routes** | Next.js route handlers; fetch from Dataverse + Supabase |
-| **Dataverse** | Source of truth for agents, environments, telemetry tables |
-| **Supabase (optional)** | Time-series storage for daily metrics and alerts |
-| **Service Principal** | Application-user added to each env via provision script |
-
-### Data Flow
-
-1. **Ingestion** - Hourly job queries Copilot Studio Dataverse tables (bots, metrics) and writes summaries to Supabase
-2. **Reading** - Dashboard calls `/api/agents` and `/api/metrics`, which aggregate across environments
-3. **Alerts** - Scheduled job evaluates governance rules, raises alerts to Supabase
-4. **UI** - Charts and tables render from the API responses
-
-## Environment Variables
-
-| Variable | Type | Required | Purpose |
-|----------|------|----------|---------|
-| `NEXT_PUBLIC_TENANT_ID` | string | Yes | Entra tenant ID |
-| `NEXT_PUBLIC_CLIENT_ID` | string | Yes | Entra app registration Client ID |
-| `NEXT_PUBLIC_APP_URL` | string | Yes | Base URL of this app (for MSAL redirects) |
-| `DATAVERSE_API_ENDPOINT` | string | Yes | Dataverse Web API base URL |
-| `NEXT_PUBLIC_SUPABASE_URL` | string | No | Supabase project URL (for metrics storage) |
-| `SUPABASE_SERVICE_ROLE_KEY` | string | No | Supabase service role API key (server-side only) |
-| `FEATURE_ALERTS_ENABLED` | string | No | Enable/disable alert system (default: `true`) |
-| `FEATURE_METRICS_INGESTION` | string | No | Enable/disable metrics ingestion (default: `true`) |
+**Environment variables** are minimally required; most settings are managed in-app. See [docs/INSTALL.md](docs/INSTALL.md#step-4-environment-variables) for the full list.
 
 ## Support
 

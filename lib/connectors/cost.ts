@@ -1,41 +1,181 @@
-import type { AgentMetricDaily } from '@/lib/types';
-
 /**
- * Cost connector
+ * cost connector
  *
- * Aggregates daily agent metrics (message volume, session count, estimated cost)
- * from Power Platform licensing and usage data.
+ * Retrieves daily agent credit consumption and environment capacity from:
+ *   - Metrics: Power Platform Licensing API
+ *       https://licensing.powerplatform.microsoft.com/api/usage/v1/billingPolicies/{policyId}/copilotMessages?startDate=...&endDate=...
+ *   - Capacity: PPAC admin API
+ *       https://api.powerplatform.com/licensing/v1/billingPolicies (lists policies w/ creditLimit)
  *
- * Data sources:
- * - licensing.powerplatform.microsoft.com (licensing metrics, message volume)
- * - Note R-001 estimate: cost calculation follows partner estimation model
+ * Falls back to mock seed data when PPAC_BILLING_POLICY_ID is not configured.
  */
 
-export const cost = {
-  /**
-   * Retrieve daily aggregated metrics for all agents in an environment.
-   *
-   * Queries Power Platform licensing API to fetch:
-   * - Message count (calls/day per bot)
-   * - Session count (unique sessions/day per bot)
-   * - Estimated cost (based on message volume and applicable meter/pricing)
-   * - Model meter (if known; else null)
-   *
-   * @param orgUrl - The organization URL of the environment (e.g., https://myorg.crm.dynamics.com)
-   * @returns Promise resolving to array of AgentMetricDaily objects
-   * @throws Error if orgUrl is invalid, authentication fails, or API is unavailable
-   *
-   * Note R-001 Estimate:
-   * Estimated cost is a partner-derived approximation based on message volume
-   * and standard pricing tiers. Actual billing may vary based on licensing model,
-   * consumption rate, and regional pricing.
-   */
+import type { CostConnector } from '@/lib/connectors/interfaces';
+import type { AgentMetricDaily, Capacity, CreditBreakdown } from '@/lib/types';
+import { getToken } from '@/lib/auth/tokenService';
+import { mockMetrics, mockCapacity } from '@/lib/mock/seed';
+
+function hasCredentials(): boolean {
+  return Boolean(
+    process.env.AZURE_CLIENT_ID &&
+      process.env.AZURE_CLIENT_SECRET &&
+      process.env.AZURE_TENANT_ID &&
+      process.env.PPAC_BILLING_POLICY_ID,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PPAC API response shapes (partial)
+// ---------------------------------------------------------------------------
+interface CopilotMessageRow {
+  botId: string;
+  environmentId: string;
+  date: string; // "YYYY-MM-DD"
+  messageCount: number;
+  sessionCount?: number;
+  modelMeter?: string | null;
+  generativeAnswers?: number;
+  agentActions?: number;
+  agentFlows?: number;
+  textTools?: number;
+}
+
+interface CopilotMessagesResponse {
+  value: CopilotMessageRow[];
+}
+
+interface BillingPolicy {
+  policyId: string;
+  environmentId: string;
+  creditLimit: number;
+  creditUsed: number;
+}
+
+interface BillingPoliciesResponse {
+  value: BillingPolicy[];
+}
+
+// ---------------------------------------------------------------------------
+// Cost estimation helper (partner estimation model, not official billing)
+// Standard meter: $0.01 per message; Premium meter: ~$0.025 per message
+// ---------------------------------------------------------------------------
+function estimateCost(messageCount: number, modelMeter: string | null): number {
+  const ratePerMsg = modelMeter === 'premium' ? 0.025 : 0.01;
+  return parseFloat((messageCount * ratePerMsg).toFixed(2));
+}
+
+function daysInCurrentMonth(): number {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+}
+
+// ---------------------------------------------------------------------------
+// Live implementation
+// ---------------------------------------------------------------------------
+async function liveGetDailyMetrics(orgUrl: string): Promise<AgentMetricDaily[]> {
+  const policyId = process.env.PPAC_BILLING_POLICY_ID ?? '';
+  const token = await getToken('https://licensing.powerplatform.microsoft.com/.default');
+
+  // Query the last 30 days
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 30);
+  const startDate = start.toISOString().split('T')[0];
+  const endDate = end.toISOString().split('T')[0];
+
+  // https://licensing.powerplatform.microsoft.com/api/usage/v1/billingPolicies/{policyId}/copilotMessages?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+  const url =
+    `https://licensing.powerplatform.microsoft.com/api/usage/v1/billingPolicies/${policyId}/copilotMessages` +
+    `?startDate=${startDate}&endDate=${endDate}`;
+
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (!resp.ok) {
+    throw new Error(
+      `PPAC copilotMessages failed: ${resp.status} ${resp.statusText}`,
+    );
+  }
+  const body = (await resp.json()) as CopilotMessagesResponse;
+
+  // Filter rows to the requested orgUrl environment (best-effort env-id match)
+  const envIdSegment = orgUrl.replace(/\/$/, '').split('.')[0].split('//')[1] ?? '';
+
+  const totalDaysInMonth = daysInCurrentMonth();
+
+  return body.value
+    .filter((row) =>
+      !envIdSegment || row.environmentId.toLowerCase().includes(envIdSegment.toLowerCase()),
+    )
+    .map((row): AgentMetricDaily => {
+      const modelMeter = row.modelMeter ?? null;
+      const estimatedCost = estimateCost(row.messageCount, modelMeter);
+      const featureBreakdown: CreditBreakdown | undefined =
+        row.generativeAnswers != null
+          ? {
+              generativeAnswers: row.generativeAnswers ?? 0,
+              agentActions: row.agentActions ?? 0,
+              agentFlows: row.agentFlows ?? 0,
+              textTools: row.textTools ?? 0,
+            }
+          : undefined;
+
+      return {
+        envId: row.environmentId,
+        botId: row.botId,
+        date: row.date,
+        messageCount: row.messageCount,
+        sessionCount: row.sessionCount ?? 0,
+        estimatedCost,
+        modelMeter,
+        featureBreakdown,
+        projectedMonthly: parseFloat((estimatedCost * totalDaysInMonth).toFixed(2)),
+      };
+    });
+}
+
+async function liveGetCapacity(): Promise<Capacity[]> {
+  // https://api.powerplatform.com/licensing/v1/billingPolicies
+  const token = await getToken('https://api.powerplatform.com/.default');
+  const resp = await fetch(
+    'https://api.powerplatform.com/licensing/v1/billingPolicies',
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } },
+  );
+  if (!resp.ok) {
+    throw new Error(
+      `PPAC billingPolicies failed: ${resp.status} ${resp.statusText}`,
+    );
+  }
+  const body = (await resp.json()) as BillingPoliciesResponse;
+  return body.value.map((p): Capacity => {
+    const pct = p.creditLimit > 0
+      ? parseFloat(((p.creditUsed / p.creditLimit) * 100).toFixed(1))
+      : 0;
+    return {
+      envId: p.environmentId,
+      creditLimit: p.creditLimit,
+      creditUsed: p.creditUsed,
+      pct,
+      overage: p.creditUsed >= p.creditLimit,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Exported connector object
+// ---------------------------------------------------------------------------
+export const cost: CostConnector = {
   async getDailyMetrics(orgUrl: string): Promise<AgentMetricDaily[]> {
-    // TODO: Implement Power Platform licensing API call
-    // Expected endpoint: licensing.powerplatform.microsoft.com/api/metrics/{orgId}/agents/daily
-    // Required headers: Authorization (Bearer token)
-    // Parse response to extract botid, date (ISO 8601), messageCount, sessionCount, estimatedCost, modelMeter
-    // Dates should span the last 30 days or as available from the API
-    return [];
+    if (!hasCredentials()) {
+      return mockMetrics;
+    }
+    return liveGetDailyMetrics(orgUrl);
+  },
+
+  async getCapacity(): Promise<Capacity[]> {
+    if (!hasCredentials()) {
+      return mockCapacity;
+    }
+    return liveGetCapacity();
   },
 };

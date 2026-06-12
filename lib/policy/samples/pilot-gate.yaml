@@ -1,0 +1,36 @@
+---
+name: pilot-promotion-gate
+version: "1.0"
+# Rules evaluated when promoting an agent from PoC to Pilot.
+# Less strict than prod-gate: owner + no unapproved HTTP are mandatory;
+# DLP and maturity checks are advisory.
+rules:
+  - id: owner_required
+    description: Agent must have a registered owner before entering Pilot
+    condition: agent.ownerEmail != null
+    blocking: true
+
+  - id: no_http_unapproved
+    description: HTTP connector requires explicit approval even in Pilot
+    condition: agent.httpApproved == true
+    blocking: true
+
+  - id: lifecycle_is_poc
+    description: Source lifecycle stage should be poc (advisory - allows re-runs)
+    condition: agent.lifecycle != "prod"
+    blocking: false
+
+  - id: dlp_reviewed_advisory
+    description: DLP review is recommended before Pilot rollout (advisory)
+    condition: agent.dlpReviewed == true
+    blocking: false
+
+  - id: no_open_critical_violations_advisory
+    description: Open critical violations should be resolved before Pilot (advisory)
+    condition: compliance.criticalViolationsCount == 0
+    blocking: false
+
+  - id: maturity_management_score
+    description: Management pillar maturity score should be >= 2 (advisory)
+    condition: maturity.managementAvg >= 2
+    blocking: false
