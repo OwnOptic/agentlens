@@ -17,6 +17,7 @@ import {
   projectedMonthly,
 } from '@/lib/cost/projections';
 import { requireSession, safeError } from '@/lib/auth/guard';
+import { getAzureCostSummary } from '@/lib/connectors/costManagement';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,8 +84,13 @@ export async function GET(req: Request) {
   const guard = await requireSession(req);
   if (!guard.ok) return guard.response;
 
+  // REAL Azure spend (Cost Management) - honest not-connected when the SP lacks
+  // the Cost Management Reader role / scope. Independent of the per-agent estimate below.
+  const azureSpend = await getAzureCostSummary();
+
   try {
-    // Use mock data (in production, would call connectors here)
+    // Per-agent message-cost ESTIMATE (partner model) - still sample data until the
+    // PPAC consumption connector is wired. The azureSpend block above is REAL.
     const metrics = mockMetrics;
     const capacity = mockCapacity;
     const agents = mockAgents;
@@ -118,6 +124,7 @@ export async function GET(req: Request) {
           estimatedLabel: '(estimated)',
         })),
         summary,
+        azureSpend,
         timestamp: new Date().toISOString(),
         dataSource: 'mock',
       },
@@ -158,6 +165,7 @@ export async function GET(req: Request) {
           ).size,
           topBurnerCount: 3,
         },
+        azureSpend,
         timestamp: new Date().toISOString(),
         fallback: true,
         dataSource: 'mock',

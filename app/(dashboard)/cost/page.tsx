@@ -48,6 +48,7 @@ import {
   InfoTip,
 } from '@/components/ui';
 import { SkeletonCard } from '@/components/Skeleton';
+import type { AzureCostSummary } from '@/lib/connectors/costManagement';
 
 interface TopBurner {
   agent: Agent | undefined;
@@ -81,6 +82,7 @@ export default function CostPage() {
     capacity: Capacity[];
     topBurners: TopBurner[];
     summary: CostSummary;
+    azureSpend?: AzureCostSummary;
     timestamp: string;
   } | null>(null);
 
@@ -211,7 +213,76 @@ export default function CostPage() {
         </Card>
       )}
 
-      {/* Cost Summary StatCards */}
+      {/* REAL Azure spend (Cost Management) - live $ from the subscription */}
+      <div className="mb-8">
+        <SectionTitle icon={DollarSign} right={
+          data.azureSpend?.connected
+            ? <DataSourceBadge state="live" source="Azure Cost Management" />
+            : <DataSourceBadge state="not_connected" source="Cost Management" />
+        }>
+          Azure Spend (live)
+        </SectionTitle>
+        {data.azureSpend?.connected ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <StatCard
+                icon={DollarSign}
+                label="Month-to-date (actual)"
+                value={`${(data.azureSpend.mtdTotal ?? 0).toFixed(2)} ${data.azureSpend.currency ?? ''}`}
+                sublabel="real Azure billing"
+                tone="emerald"
+              />
+              <StatCard
+                icon={TrendingUp}
+                label="Forecast (month-end)"
+                value={
+                  data.azureSpend.forecastTotal != null
+                    ? `${data.azureSpend.forecastTotal.toFixed(2)} ${data.azureSpend.currency ?? ''}`
+                    : 'n/a'
+                }
+                sublabel="Cost Management forecast"
+                tone="sky"
+              />
+              <StatCard
+                icon={Boxes}
+                label="Billed services"
+                value={data.azureSpend.byService?.length ?? 0}
+                sublabel="distinct Azure services"
+                tone="violet"
+              />
+            </div>
+            {data.azureSpend.byService && data.azureSpend.byService.length > 0 && (
+              <Card className="p-0">
+                <SectionTitle><span className="px-4 pt-4 block">Top services by cost</span></SectionTitle>
+                <div className="divide-y divide-slate-800">
+                  {data.azureSpend.byService.slice(0, 6).map((s) => (
+                    <div key={s.service} className="flex items-center justify-between px-4 py-2 text-sm">
+                      <span className="text-slate-300">{s.service}</span>
+                      <span className="font-medium text-slate-100">
+                        {s.cost.toFixed(2)} {data.azureSpend?.currency ?? ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
+        ) : (
+          <Card className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+            <div className="text-sm">
+              <p className="text-slate-300">Azure Cost Management not connected.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {data.azureSpend?.reason ?? 'Configure the service principal and scope.'}
+                {' '}Grant the AgentLens-Reader SP the <span className="text-slate-300">Cost Management Reader</span> role and set
+                {' '}<code className="text-slate-300">AZURE_SUBSCRIPTION_ID</code> to see real spend (includes Power Platform / Copilot Studio PAYG meters).
+              </p>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* Per-agent message-cost ESTIMATE (sample until PPAC consumption is wired) */}
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard
           icon={DollarSign}

@@ -375,7 +375,12 @@ Write-Host "   Each user needs the 'Admin' or 'Maker' role." -ForegroundColor Gr
 Write-Host "   https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Users/objectId/$webSpObjectId/appId/$webAppId" -ForegroundColor Cyan
 Write-Host "   -> Add user/group -> Select role (Admin or Maker)" -ForegroundColor Gray
 Write-Host ""
-Write-Host "4. (If using Key Vault + Managed Identity in production)" -ForegroundColor White
+Write-Host "4. (Optional - for the live Cost page) GRANT 'Cost Management Reader' to AgentLens-Reader" -ForegroundColor White
+Write-Host "   Lets the SP read REAL Azure spend (incl. Power Platform / Copilot Studio PAYG meters)." -ForegroundColor Gray
+Write-Host "   Portal: Subscription -> Access control (IAM) -> Add role assignment" -ForegroundColor Gray
+Write-Host "   -> Role: Cost Management Reader -> Member: AgentLens-Reader. Then set AZURE_SUBSCRIPTION_ID." -ForegroundColor Gray
+Write-Host ""
+Write-Host "5. (If using Key Vault + Managed Identity in production)" -ForegroundColor White
 Write-Host "   Assign 'Key Vault Secrets User' role to the App Service managed identity:" -ForegroundColor Gray
 Write-Host "   Portal: Key Vault -> Access control (IAM) -> Add role assignment" -ForegroundColor Gray
 Write-Host "   -> Role: Key Vault Secrets User -> Member: your App Service name" -ForegroundColor Gray
