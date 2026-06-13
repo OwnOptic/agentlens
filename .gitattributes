@@ -1,0 +1,33 @@
+# Normalize line endings: store everything as LF in the repo, check out native.
+# This eliminates the "LF will be replaced by CRLF" warnings on Windows commits.
+* text=auto eol=lf
+
+# Shell scripts must stay LF even on Windows checkout
+*.sh text eol=lf
+
+# PowerShell scripts are conventionally CRLF on Windows
+*.ps1 text eol=crlf
+
+# Bicep / config / source: LF
+*.bicep text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+
+# Binary assets - never normalize
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.svg  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.pdf   binary

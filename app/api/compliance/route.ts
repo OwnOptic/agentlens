@@ -8,6 +8,8 @@
  *   - bulk-acknowledge or bulk-resolve violations (admin only)
  *
  * Falls back to mock seed data (no live credentials required).
+ * Violation state overrides are persisted via lib/db/complianceViolations
+ * (Supabase when configured, in-memory Map otherwise).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,32 +25,43 @@ import { evaluateAgents } from '@/lib/compliance/evaluator';
 import { scoreTenant } from '@/lib/compliance/scoring';
 import { buildPatternsMatrix } from '@/lib/compliance/riskyPatterns';
 import { requireSession } from '@/lib/auth/guard';
+import {
+  getViolationStates,
+  setViolationStates,
+} from '@/lib/db/complianceViolations';
 
 export const dynamic = 'force-dynamic';
 
 // ---------------------------------------------------------------------------
-// In-memory violation store (per process; resets on cold start)
+// Rule helpers
 // ---------------------------------------------------------------------------
-
-let _violationStore: ComplianceViolation[] | null = null;
-
-function getViolationStore(): ComplianceViolation[] {
-  if (_violationStore === null) {
-    const allRules = mergeRules();
-    _violationStore = evaluateAgents(
-      mockAgents,
-      mockEnvironments,
-      allRules,
-      mockViolations,
-    );
-  }
-  return _violationStore;
-}
 
 function mergeRules() {
   const seedIds = new Set(mockComplianceRules.map((r) => r.id));
   const extra = defaultRulePack.filter((r) => !seedIds.has(r.id));
   return [...mockComplianceRules, ...extra];
+}
+
+/**
+ * Evaluate agents and apply any persisted state overrides on top.
+ * This is async because the state store may hit Supabase.
+ */
+async function getViolations(): Promise<ComplianceViolation[]> {
+  const allRules = mergeRules();
+  const base: ComplianceViolation[] = evaluateAgents(
+    mockAgents,
+    mockEnvironments,
+    allRules,
+    mockViolations,
+  );
+
+  const overrides = await getViolationStates();
+  if (overrides.size === 0) return base;
+
+  return base.map((v) => {
+    const override = overrides.get(v.id);
+    return override !== undefined ? { ...v, state: override } : v;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +76,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const view = searchParams.get('view');
 
   const allRules = mergeRules();
-  const violations = getViolationStore();
+  const violations = await getViolations();
 
   if (view === 'violations') {
     return NextResponse.json({ violations, dataSource: 'mock' });
@@ -121,21 +134,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const action = body.action === 'ack' ? 'acknowledged' : 'resolved';
+  const newState = body.action === 'ack' ? 'acknowledged' : 'resolved';
   const ids = body.ids as string[];
 
-  const store = getViolationStore();
-  let updated = 0;
-
-  for (let i = 0; i < store.length; i++) {
-    if (ids.includes(store[i].id)) {
-      store[i] = { ...store[i], state: action };
-      updated++;
-    }
+  try {
+    await setViolationStates(ids, newState as ComplianceViolation['state']);
+  } catch (err) {
+    console.error('[api/compliance] setViolationStates failed:', err);
+    return NextResponse.json({ error: 'Failed to persist state changes' }, { status: 500 });
   }
 
+  // Re-compute score with updated states applied
   const allRules = mergeRules();
-  const tenantScore = scoreTenant(mockAgents, mockEnvironments, allRules, store);
+  const violations = await getViolations();
+  const tenantScore = scoreTenant(mockAgents, mockEnvironments, allRules, violations);
 
-  return NextResponse.json({ updated, tenantScore });
+  return NextResponse.json({ updated: ids.length, tenantScore });
 }

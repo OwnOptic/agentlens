@@ -12,8 +12,9 @@
 import React, { useState, useMemo } from 'react';
 import type { Agent, LifecycleStage } from '@/lib/types';
 import { mockAgents, mockEnvironments, mockMetrics, mockAlerts } from '@/lib/mock/seed';
-import { Eye } from 'lucide-react';
-import { PageHeader, DataSourceBadge } from '@/components/ui';
+import { Eye, Bot, FlaskConical, Rocket, Layers } from 'lucide-react';
+import { PageHeader, DataSourceBadge, StatCard, Badge } from '@/components/ui';
+import type { BadgeVariant } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,30 +23,19 @@ import { PageHeader, DataSourceBadge } from '@/components/ui';
 const ENV_MAP = Object.fromEntries(mockEnvironments.map((e) => [e.id, e.name]));
 
 function lifecycleBadge(stage: LifecycleStage | undefined) {
-  const map: Record<LifecycleStage, { label: string; cls: string }> = {
-    poc: { label: 'PoC', cls: 'bg-slate-700 text-slate-300' },
-    pilot: { label: 'Pilot', cls: 'bg-amber-900/60 text-amber-300' },
-    prod: { label: 'Prod', cls: 'bg-emerald-900/60 text-emerald-300' },
+  const map: Record<LifecycleStage, { label: string; variant: BadgeVariant }> = {
+    poc:   { label: 'PoC',   variant: 'neutral' },
+    pilot: { label: 'Pilot', variant: 'warning' },
+    prod:  { label: 'Prod',  variant: 'success' },
   };
   if (!stage) return null;
-  const { label, cls } = map[stage];
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {label}
-    </span>
-  );
+  const { label, variant } = map[stage];
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 function stateBadge(state: string) {
-  const active = state === 'Active';
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-        active ? 'bg-emerald-900/40 text-emerald-400' : 'bg-slate-800 text-slate-500'
-      }`}
-    >
-      {state}
-    </span>
+    <Badge variant={state === 'Active' ? 'success' : 'neutral'}>{state}</Badge>
   );
 }
 
@@ -88,9 +78,7 @@ function AgentRow({ agent, latestCost, openAlerts, now }: AgentRowProps) {
       </td>
       <td className="px-4 py-3">
         {openAlerts > 0 ? (
-          <span className="inline-flex items-center rounded-full bg-red-900/60 px-2 py-0.5 text-xs font-medium text-red-300">
-            {openAlerts} alert{openAlerts > 1 ? 's' : ''}
-          </span>
+          <Badge variant="critical">{openAlerts} alert{openAlerts > 1 ? 's' : ''}</Badge>
         ) : (
           <span className="text-xs text-slate-600">-</span>
         )}
@@ -187,17 +175,10 @@ export default function MakerPage() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          { label: 'Total agents', value: myAgents.length, cls: 'text-white' },
-          { label: 'PoC', value: pocCount, cls: 'text-slate-400' },
-          { label: 'Pilot', value: pilotCount, cls: 'text-amber-400' },
-          { label: 'Prod', value: prodCount, cls: 'text-emerald-400' },
-        ].map(({ label, value, cls }) => (
-          <div key={label} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <p className="text-xs text-slate-500">{label}</p>
-            <p className={`mt-1 text-3xl font-bold ${cls}`}>{value}</p>
-          </div>
-        ))}
+        <StatCard icon={Bot}         label="Total agents" value={myAgents.length} tone="sky" />
+        <StatCard icon={FlaskConical} label="PoC"          value={pocCount}       tone="slate" />
+        <StatCard icon={Layers}       label="Pilot"        value={pilotCount}     tone="amber" />
+        <StatCard icon={Rocket}       label="Prod"         value={prodCount}      tone="emerald" />
       </div>
 
       {/* Agents table */}

@@ -11,7 +11,7 @@ import React, { useState, useMemo } from 'react';
 import type { Agent, LifecycleStage } from '@/lib/types';
 import { mockAgents, mockEnvironments, mockGatePolicies, mockGateDecisions } from '@/lib/mock/seed';
 import { Layers } from 'lucide-react';
-import { PageHeader, DataSourceBadge } from '@/components/ui';
+import { PageHeader, DataSourceBadge, Card, Badge } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 
 // ---------------------------------------------------------------------------
@@ -168,20 +168,14 @@ function ProdChecklist({ agent, now }: { agent: Agent; now: number }) {
 // ---------------------------------------------------------------------------
 function AgentCard({ agent, now }: { agent: Agent; now: number }) {
   return (
-    <div className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
+    <Card hover className="p-3">
       <div className="font-medium text-sm text-slate-200">{agent.name}</div>
       <div className="mt-0.5 text-xs text-slate-600 font-mono truncate">{agent.botId}</div>
       <div className="mt-2 flex flex-wrap gap-2 text-xs">
         <span className="text-slate-500">{ENV_MAP[agent.envId] ?? agent.envId}</span>
-        <span
-          className={`rounded-full px-1.5 py-0.5 font-medium ${
-            agent.state === 'Active'
-              ? 'bg-emerald-900/40 text-emerald-400'
-              : 'bg-slate-800 text-slate-500'
-          }`}
-        >
+        <Badge variant={agent.state === 'Active' ? 'success' : 'neutral'}>
           {agent.state}
-        </span>
+        </Badge>
         {agent.ownerName && (
           <span className="text-slate-500">{agent.ownerName}</span>
         )}
@@ -189,7 +183,7 @@ function AgentCard({ agent, now }: { agent: Agent; now: number }) {
 
       {/* Prod checklist only on agents in prod stage */}
       {agent.lifecycle === 'prod' && <ProdChecklist agent={agent} now={now} />}
-    </div>
+    </Card>
   );
 }
 
@@ -200,18 +194,13 @@ function StageColumn({ stage, now }: { stage: LifecycleStage; now: number }) {
   const agents = mockAgents.filter((a) => a.lifecycle === stage);
 
   return (
-    <div
-      className={`flex flex-col rounded-lg border p-4 ${STAGE_COLORS[stage]}`}
-      style={{ minHeight: '300px' }}
-    >
+    <Card className={`flex flex-col p-4 [min-height:300px] ${STAGE_COLORS[stage]}`}>
       {/* Column header */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className={`font-semibold ${STAGE_HEADER_COLORS[stage]}`}>
           {STAGE_LABELS[stage]}
         </h2>
-        <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">
-          {agents.length}
-        </span>
+        <Badge variant="neutral">{agents.length}</Badge>
       </div>
 
       {/* Cards */}
@@ -224,7 +213,7 @@ function StageColumn({ stage, now }: { stage: LifecycleStage; now: number }) {
           ))
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 

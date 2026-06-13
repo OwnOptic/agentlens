@@ -7,12 +7,14 @@
  *   Requires admin role.
  *
  * GET /api/gates
- *   Returns: { policies: GatePolicy[], decisions: GateDecision[], dataSource: 'mock' }
+ *   Returns: { policies: GatePolicy[], decisions: GateDecision[], dataSource: 'mock' | 'db' }
  *
  * DELETE /api/gates?id=<decisionId>
  *   Revokes a decision. Requires admin role.
  *
  * Falls back to mock seed data when live credentials are absent.
+ * Decision persistence uses lib/db/gateDecisions (Supabase when configured,
+ * in-memory Map otherwise).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,24 +24,20 @@ import { runGate } from '@/lib/policy/gates';
 import { verifyDecision } from '@/lib/policy/signing';
 import {
   mockGatePolicies,
-  mockGateDecisions,
   mockAgents,
   mockEnvironments,
   mockMaturityResults,
   mockViolations,
 } from '@/lib/mock/seed';
 import { requireSession, safeError } from '@/lib/auth/guard';
+import {
+  listDecisions,
+  getDecisionById,
+  saveDecision,
+  revokeDecisionById,
+} from '@/lib/db/gateDecisions';
 
 export const dynamic = 'force-dynamic';
-
-// ---------------------------------------------------------------------------
-// In-memory decision store (replaces DB for offline/demo use)
-// Hydrated from mock seed on first import.
-// ---------------------------------------------------------------------------
-
-const decisionStore: Map<string, GateDecision> = new Map(
-  mockGateDecisions.map((d) => [d.id, d])
-);
 
 // ---------------------------------------------------------------------------
 // GET /api/gates
@@ -50,9 +48,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!guard.ok) return guard.response;
 
   const policies: GatePolicy[] = mockGatePolicies;
-  const decisions: GateDecision[] = Array.from(decisionStore.values()).sort(
-    (a, b) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime()
-  );
+  const decisions: GateDecision[] = await listDecisions();
 
   // Annotate decisions with verify state for the UI
   const annotatedDecisions = decisions.map((d) => ({
@@ -116,8 +112,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       policyId,
     });
 
-    // Persist decision to in-memory store
-    decisionStore.set(output.decision.id, output.decision);
+    // Persist decision to the repo (Supabase or in-memory)
+    await saveDecision(output.decision);
 
     return NextResponse.json(output, { status: 200 });
   } catch (err) {
@@ -148,7 +144,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Missing query param: id' }, { status: 400 });
   }
 
-  const existing = decisionStore.get(id);
+  const existing = await getDecisionById(id);
   if (!existing) {
     return NextResponse.json({ error: `Decision not found: ${id}` }, { status: 404 });
   }
@@ -157,10 +153,16 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Decision is already revoked' }, { status: 409 });
   }
 
-  const revoked = { ...existing, revoked: true };
-  decisionStore.set(id, revoked);
-
-  return NextResponse.json({ revoked: true, decision: revoked }, { status: 200 });
+  try {
+    const revoked = await revokeDecisionById(id);
+    return NextResponse.json({ revoked: true, decision: revoked }, { status: 200 });
+  } catch (err) {
+    console.error('[api/gates] Revoke failed:', err);
+    return NextResponse.json(
+      { error: 'Revoke failed', detail: safeError(err) },
+      { status: 500 }
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

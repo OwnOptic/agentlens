@@ -8,7 +8,7 @@
  * Do NOT use in client components.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 /**
@@ -61,6 +61,21 @@ export function getSupabaseClient() {
  */
 export function resetSupabaseClient(): void {
   supabaseInstance = null;
+}
+
+/**
+ * Try to get a Supabase client without throwing.
+ *
+ * Returns null when SUPABASE_URL or SUPABASE_SERVICE_KEY are absent so that
+ * callers can fall back to an in-memory store instead of crashing.
+ * Use this in repository modules that need graceful degradation.
+ */
+export function tryGetSupabaseClient(): SupabaseClient<Database> | null {
+  try {
+    return getSupabaseClient();
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -3,6 +3,10 @@
  *
  * Supabase-generated types that correspond to the SQL schema.
  * These types are used for type-safe database operations.
+ *
+ * Every table entry includes `Relationships: never[]` so that the `public`
+ * schema satisfies Supabase's GenericSchema constraint, enabling fully-typed
+ * `.from('table')` calls (instead of an `any` cast).
  */
 
 export interface Database {
@@ -39,6 +43,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: never[];
       };
       agents: {
         Row: {
@@ -83,6 +88,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: never[];
       };
       agent_metrics_daily: {
         Row: {
@@ -118,6 +124,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: never[];
       };
       alerts: {
         Row: {
@@ -153,6 +160,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: never[];
       };
       migration_tracker: {
         Row: {
@@ -188,6 +196,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: never[];
       };
       ingestion_runs: {
         Row: {
@@ -223,6 +232,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: never[];
       };
       config: {
         Row: {
@@ -246,10 +256,68 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: never[];
+      };
+      gate_decisions: {
+        Row: {
+          id: string;
+          agent_ref: string;
+          policy_id: string | null;
+          verdict: 'pass' | 'block';
+          reasons: string[];
+          signed_at: string;
+          signature: string;
+          revoked: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_ref: string;
+          policy_id?: string | null;
+          verdict: 'pass' | 'block';
+          reasons?: string[];
+          signed_at?: string;
+          signature: string;
+          revoked?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_ref?: string;
+          policy_id?: string | null;
+          verdict?: 'pass' | 'block';
+          reasons?: string[];
+          signed_at?: string;
+          signature?: string;
+          revoked?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: never[];
+      };
+      compliance_violation_states: {
+        Row: {
+          id: string;
+          state: 'open' | 'acknowledged' | 'resolved' | 'suppressed';
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          state: 'open' | 'acknowledged' | 'resolved' | 'suppressed';
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          state?: 'open' | 'acknowledged' | 'resolved' | 'suppressed';
+          updated_at?: string;
+        };
+        Relationships: never[];
       };
     };
-    Views: Record<string, unknown>;
-    Functions: Record<string, unknown>;
-    Enums: Record<string, unknown>;
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
   };
 }

@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import type { HealthMetric } from '@/lib/types';
-import { Activity } from 'lucide-react';
-import { PageHeader, DataSourceBadge } from '@/components/ui';
+import { Activity, CheckCircle2, AlertTriangle, XCircle, Hash, Percent, Timer, Bot } from 'lucide-react';
+import { PageHeader, DataSourceBadge, StatCard, SectionTitle, Card, Badge } from '@/components/ui';
 import { SkeletonTable } from '@/components/Skeleton';
 
 
@@ -100,16 +100,16 @@ function HealthPage() {
     fetchMetrics();
   }, []);
 
-  const getErrorRateBadge = (rate: number): string => {
-    if (rate > 0.05) return 'text-red-400 bg-red-900/30';
-    if (rate > 0.02) return 'text-amber-400 bg-amber-900/30';
-    return 'text-green-400 bg-green-900/30';
+  const getErrorRateVariant = (rate: number): 'critical' | 'warning' | 'success' => {
+    if (rate > 0.05) return 'critical';
+    if (rate > 0.02) return 'warning';
+    return 'success';
   };
 
-  const getLatencyBadge = (latencyMs: number): string => {
-    if (latencyMs > 1500) return 'text-red-400 bg-red-900/30';
-    if (latencyMs > 1000) return 'text-amber-400 bg-amber-900/30';
-    return 'text-green-400 bg-green-900/30';
+  const getLatencyVariant = (latencyMs: number): 'critical' | 'warning' | 'success' => {
+    if (latencyMs > 1500) return 'critical';
+    if (latencyMs > 1000) return 'warning';
+    return 'success';
   };
 
   const getTrendIcon = (trend: string): string => {
@@ -193,56 +193,23 @@ function HealthPage() {
 
       {/* Health Status Summary */}
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Healthy Agents</div>
-          <div className="text-3xl font-bold text-green-400">{healthyAgents}</div>
-          <div className="text-xs text-slate-500 mt-2">Error rate &lt; 2%</div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Warning Agents</div>
-          <div className="text-3xl font-bold text-amber-400">{warningAgents}</div>
-          <div className="text-xs text-slate-500 mt-2">Error rate 2-5%</div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Critical Agents</div>
-          <div className="text-3xl font-bold text-red-400">{criticalAgents}</div>
-          <div className="text-xs text-slate-500 mt-2">Error rate &gt; 5%</div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Total Failed Sessions</div>
-          <div className="text-3xl font-bold text-slate-300">{totalFailedSessions}</div>
-          <div className="text-xs text-slate-500 mt-2">Across all agents</div>
-        </div>
+        <StatCard icon={CheckCircle2} label="Healthy Agents" value={healthyAgents} sublabel="Error rate < 2%" tone="emerald" />
+        <StatCard icon={AlertTriangle} label="Warning Agents" value={warningAgents} sublabel="Error rate 2-5%" tone="amber" />
+        <StatCard icon={XCircle} label="Critical Agents" value={criticalAgents} sublabel="Error rate > 5%" tone="red" />
+        <StatCard icon={Hash} label="Total Failed Sessions" value={totalFailedSessions} sublabel="Across all agents" tone="slate" />
       </div>
 
       {/* Aggregate Metrics */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Avg Error Rate</div>
-          <div className="text-3xl font-bold text-slate-300">{avgErrorRate}%</div>
-          <div className="text-xs text-slate-500 mt-2">Across all agents</div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Avg Latency</div>
-          <div className="text-3xl font-bold text-slate-300">{avgLatency} ms</div>
-          <div className="text-xs text-slate-500 mt-2">Mean response time</div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-sm font-medium text-slate-400 mb-2">Agents Monitored</div>
-          <div className="text-3xl font-bold text-slate-300">{agentSummaries.length}</div>
-          <div className="text-xs text-slate-500 mt-2">Unique bots with metrics</div>
-        </div>
+        <StatCard icon={Percent} label="Avg Error Rate" value={`${avgErrorRate}%`} sublabel="Across all agents" tone="slate" />
+        <StatCard icon={Timer} label="Avg Latency" value={`${avgLatency} ms`} sublabel="Mean response time" tone="slate" />
+        <StatCard icon={Bot} label="Agents Monitored" value={agentSummaries.length} sublabel="Unique bots with metrics" tone="sky" />
       </div>
 
       {/* Per-Agent Health Table */}
       {agentSummaries.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 mb-8">
-          <h2 className="text-lg font-semibold text-white mb-4">Per-Agent Health Metrics</h2>
+        <Card className="p-6 mb-8">
+          <SectionTitle icon={Activity}>Per-Agent Health Metrics</SectionTitle>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -267,17 +234,17 @@ function HealthPage() {
                     <td className="py-3 px-4 text-slate-400 text-xs">{summary.envId}</td>
                     <td className="py-3 px-4 text-slate-400 text-xs">{summary.latestDate}</td>
                     <td className="py-3 px-4 text-right">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getErrorRateBadge(summary.latestErrorRate)}`}>
+                      <Badge variant={getErrorRateVariant(summary.latestErrorRate)}>
                         {(summary.latestErrorRate * 100).toFixed(2)}%
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-3 px-4 text-right text-slate-300">
                       {(summary.avgErrorRate * 100).toFixed(2)}%
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getLatencyBadge(summary.latestLatencyMs)}`}>
+                      <Badge variant={getLatencyVariant(summary.latestLatencyMs)}>
                         {summary.latestLatencyMs} ms
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-3 px-4 text-right text-slate-300">
                       {Math.round(summary.avgLatencyMs)} ms
@@ -295,13 +262,13 @@ function HealthPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Error Rate Distribution Chart */}
       {agentSummaries.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 mb-8">
-          <h2 className="text-lg font-semibold text-white mb-4">Error Rate Distribution</h2>
+        <Card className="p-6 mb-8">
+          <SectionTitle icon={Percent}>Error Rate Distribution</SectionTitle>
           <div className="space-y-2">
             {agentSummaries.slice(0, 10).map((summary) => (
               <div key={`chart-${summary.botId}`} className="flex items-center gap-3">
@@ -328,13 +295,13 @@ function HealthPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Latency Trend Chart */}
       {agentSummaries.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Latency by Agent (Top 10)</h2>
+        <Card className="p-6">
+          <SectionTitle icon={Timer}>Latency by Agent (Top 10)</SectionTitle>
           <div className="space-y-2">
             {agentSummaries
               .slice(0, 10)
@@ -364,7 +331,7 @@ function HealthPage() {
                 </div>
               ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {agentSummaries.length === 0 && (
