@@ -42,6 +42,24 @@ param deployPostgres bool = false
 @description('Application Insights connection string. Empty string = App Insights disabled (no setting emitted).')
 param appInsightsConnectionString string = ''
 
+@description('App Service Plan SKU. F1 = Free (no cost, no always-on, 60 CPU-min/day - for testing). B1 = Basic (~$13/mo, always-on). S1 = Standard (slots/autoscale).')
+@allowed([
+  'F1'
+  'B1'
+  'B2'
+  'S1'
+])
+param appServiceSku string = 'F1'
+
+// ---------------------------------------------------------------------------
+// Derived SKU settings
+// ---------------------------------------------------------------------------
+
+// Free/Shared tiers do not support always-on or health check; enabling them on
+// F1 makes the deployment fail. Gate both on a non-free SKU.
+var isFreeTier = appServiceSku == 'F1'
+var skuTier = isFreeTier ? 'Free' : (startsWith(appServiceSku, 'S') ? 'Standard' : 'Basic')
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -61,8 +79,8 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: 'asp-${baseName}'
   location: location
   sku: {
-    name: 'B1'
-    tier: 'Basic'
+    name: appServiceSku
+    tier: skuTier
     capacity: 1
   }
   kind: 'linux'
@@ -88,13 +106,15 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
     siteConfig: {
       linuxFxVersion: 'NODE|20-lts'
       nodeVersion: '~20'
-      alwaysOn: true
+      // always-on requires Basic+; on F1 Free it must be false (testing OK - the
+      // app cold-starts on the first request after idle).
+      alwaysOn: !isFreeTier
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       http20Enabled: true
-      // App Service health check: auto-heals hung instances when the endpoint
-      // returns non-2xx for 10 minutes. Route: app/api/health/route.ts
-      healthCheckPath: '/api/health'
+      // App Service health check (auto-heal) requires Basic+; null on F1 Free.
+      // Route: app/api/health/route.ts
+      healthCheckPath: isFreeTier ? null : '/api/health'
       // Next.js standalone: serve from .next/standalone
       appCommandLine: 'node server.js'
       appSettings: concat([

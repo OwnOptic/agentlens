@@ -52,6 +52,15 @@ param azureOpenAiDeployment string = 'gpt-4o'
 @description('Azure OpenAI API version (non-secret).')
 param azureOpenAiApiVersion string = '2024-08-01-preview'
 
+@description('App Service Plan SKU. F1 = Free ($0, no always-on - for testing/demo). B1 = Basic (~$13/mo). S1 = Standard.')
+@allowed([
+  'F1'
+  'B1'
+  'B2'
+  'S1'
+])
+param appServiceSku string = 'F1'
+
 @description('Whether to deploy Azure PostgreSQL Flexible Server (true = client tenant; false = use Supabase). See docs/DEPLOY.md D-021.')
 param deployPostgres bool = false
 
@@ -135,6 +144,7 @@ module webApp 'modules/webapp.bicep' = {
     // The null-coalescing fallback (appInsights?.properties.ConnectionString ?? '')
     // avoids Bicep BCP318 when deployAppInsights=false and appInsights is null.
     appInsightsConnectionString: appInsights.?properties.ConnectionString ?? ''
+    appServiceSku: appServiceSku
   }
 }
 
