@@ -1,6 +1,28 @@
 # Project Plan: AgentLens Robustness, Improvement & Streamlining
-Date: 2026-06-13 | Owner: Elliot Margot | Status: Draft
+Date: 2026-06-13 | Owner: Elliot Margot | Status: EXECUTED (Phases 0-6 landed 2026-06-13)
 Objective: Take AgentLens from "builds and demos cleanly" to "robust, honest, and safe to hand a client" by closing every defect found in a full-codebase audit, without weakening the honesty-first principle.
+
+## Execution status (2026-06-13)
+
+All seven phases were executed and pushed to OwnOptic/agentlens main. Each landed
+with tsc clean + `next build` (41 routes) + vitest (37/37) + `az bicep build` (0
+errors) + empty-.env runtime smoke (all pages 200).
+
+| Phase | Status | Commit | Notes |
+|-------|--------|--------|-------|
+| 0 - Deploy-breakers & P0 security | DONE | T-001/002/601 earlier; T-003..006 in `32816c6` | uniform API auth, secret-free JWT, lazy signing fail-fast, timing-safe cron |
+| 1 - Honesty integrity | DONE | `4db1a12` | demo badges on all mock pages, AI honest-stub, no mock-as-real |
+| 2 - Connector robustness | DONE | `4db1a12` | fetchODataAll pagination, timeouts, allSettled, real token expiry |
+| 3 - Governance correctness | DONE | `8fb6766` | live-data compliance, one evaluator, parser fixes, real Setup wizard |
+| 4 - UX robustness | DONE | `4db1a12` | error states, hydration fixes, skeletons, sign-in feedback |
+| 5 - Streamlining | DONE* | `4db1a12`,`8fb6766` | helper consolidation, dead-code removal, rate-limiter pruning. *T-502 (refactor bespoke pages to ui primitives) intentionally deferred - Phase 1/4 already modernised those pages; a full refactor would be churn for low value. |
+| 6 - Deploy polish & docs | DONE | `8fb6766` | Bicep cycle fixed earlier; cross-platform standalone copy, health check, optional App Insights, Postgres AAD |
+
+Tooling added: runnable unit suite (`vitest.config.ts` + `npm test`).
+Residual (tracked, not blocking): live `azd up` against a real subscription is
+unverified (needs an Azure account); the in-memory stores (compliance violations,
+gate decisions, rate limiter) remain process-local by design - replace with the
+DB before multi-instance production. The 2 formerly-skipped parser tests now pass.
 
 ---
 
