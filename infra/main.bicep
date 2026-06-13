@@ -40,6 +40,18 @@ param azureAdClientId string
 @description('Comma-separated Dataverse org URLs to scan (e.g. https://org.crm.dynamics.com)')
 param agentLensOrgUrls string = ''
 
+@description('Supabase project URL (non-secret). Leave empty when using deployPostgres=true.')
+param supabaseUrl string = ''
+
+@description('Azure OpenAI endpoint, e.g. https://your-resource.openai.azure.com (non-secret). Powers the Ask AI page.')
+param azureOpenAiEndpoint string = ''
+
+@description('Azure OpenAI chat deployment name, e.g. gpt-4o (non-secret).')
+param azureOpenAiDeployment string = 'gpt-4o'
+
+@description('Azure OpenAI API version (non-secret).')
+param azureOpenAiApiVersion string = '2024-08-01-preview'
+
 @description('Whether to deploy Azure PostgreSQL Flexible Server (true = client tenant; false = use Supabase). See docs/DEPLOY.md D-021.')
 param deployPostgres bool = false
 
@@ -48,9 +60,10 @@ param deployPostgres bool = false
 param pgAdminPassword string = ''
 
 // ---------------------------------------------------------------------------
-// Module: Web App (deployed first to get principalId for KV role assignment)
-// NOTE: webapp needs keyVaultUri which comes from the KV module - we solve this
-// with a two-pass approach: KV first (no principalId needed), then webapp.
+// Deployment order is LINEAR (no cycles):
+//   1. kv      - Key Vault (depends on nothing)
+//   2. webApp  - Web App + managed identity (depends on kv.keyVaultUri)
+//   3. kvRole  - grants the identity access to the vault (depends on kv + webApp)
 // ---------------------------------------------------------------------------
 
 module kv 'modules/keyvault.bicep' = {
@@ -58,12 +71,6 @@ module kv 'modules/keyvault.bicep' = {
   params: {
     location: location
     baseName: baseName
-    // webAppPrincipalId comes from the webapp module; we wire it after webapp deploys.
-    // To break the circular dependency: deploy KV first with a placeholder role,
-    // then the webapp module references KV URI, and the role assignment is in the KV module
-    // but depends on webapp.outputs.principalId.
-    // Bicep handles this correctly via module output chaining.
-    webAppPrincipalId: webApp.outputs.principalId
   }
 }
 
@@ -77,9 +84,21 @@ module webApp 'modules/webapp.bicep' = {
     azureClientId: azureClientId
     azureAdClientId: azureAdClientId
     agentLensOrgUrls: agentLensOrgUrls
+    supabaseUrl: supabaseUrl
+    azureOpenAiEndpoint: azureOpenAiEndpoint
+    azureOpenAiDeployment: azureOpenAiDeployment
+    azureOpenAiApiVersion: azureOpenAiApiVersion
+    deployPostgres: deployPostgres
   }
-  // webapp needs the KV URI but not the role assignment
-  dependsOn: [kv]
+}
+
+// Role assignment AFTER both kv and webApp exist - this is what breaks the cycle.
+module kvRole 'modules/kv-role.bicep' = {
+  name: 'kv-role-deploy'
+  params: {
+    keyVaultName: kv.outputs.keyVaultName
+    principalId: webApp.outputs.principalId
+  }
 }
 
 module postgres 'modules/postgres.bicep' = {

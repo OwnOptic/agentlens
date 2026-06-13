@@ -24,6 +24,21 @@ param azureAdClientId string
 @description('Comma-separated Dataverse org URLs to scan')
 param agentLensOrgUrls string = ''
 
+@description('Supabase project URL (non-secret)')
+param supabaseUrl string = ''
+
+@description('Azure OpenAI endpoint (non-secret), e.g. https://your-resource.openai.azure.com')
+param azureOpenAiEndpoint string = ''
+
+@description('Azure OpenAI chat deployment name (non-secret)')
+param azureOpenAiDeployment string = 'gpt-4o'
+
+@description('Azure OpenAI API version (non-secret)')
+param azureOpenAiApiVersion string = '2024-08-01-preview'
+
+@description('When true, also wire DATABASE_URL as a Key Vault reference (secret DATABASE-URL)')
+param deployPostgres bool = false
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -76,7 +91,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
       http20Enabled: true
       // Next.js standalone: serve from .next/standalone
       appCommandLine: 'node server.js'
-      appSettings: [
+      appSettings: concat([
         // ---- Key Vault URI (plain - needed by the app to construct KV client) ----
         {
           name: 'KEY_VAULT_URI'
@@ -98,6 +113,22 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'AGENTLENS_ORG_URLS'
           value: agentLensOrgUrls
+        }
+        {
+          name: 'SUPABASE_URL'
+          value: supabaseUrl
+        }
+        {
+          name: 'AZURE_OPENAI_ENDPOINT'
+          value: azureOpenAiEndpoint
+        }
+        {
+          name: 'AZURE_OPENAI_DEPLOYMENT'
+          value: azureOpenAiDeployment
+        }
+        {
+          name: 'AZURE_OPENAI_API_VERSION'
+          value: azureOpenAiApiVersion
         }
         {
           name: 'NEXTAUTH_URL'
@@ -128,6 +159,10 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'WEBAPP_CLIENT_SECRET'
           value: kvRef(keyVaultUri, 'WEBAPP-CLIENT-SECRET')
         }
+        {
+          name: 'TEAMS_WEBHOOK_URL'
+          value: kvRef(keyVaultUri, 'TEAMS-WEBHOOK-URL')
+        }
         // ---- Node / Next.js runtime ----
         {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
@@ -141,7 +176,18 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
           value: 'false'
         }
-      ]
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
+        }
+      ],
+      // DATABASE_URL only when deploying Azure PostgreSQL (else Supabase is used)
+      deployPostgres ? [
+        {
+          name: 'DATABASE_URL'
+          value: kvRef(keyVaultUri, 'DATABASE-URL')
+        }
+      ] : [])
     }
   }
 }

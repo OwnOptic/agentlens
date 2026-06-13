@@ -36,10 +36,15 @@ Run the provisioning script to create both Entra app registrations:
 
 ```powershell
 ./scripts/provision-app-registrations.ps1 `
-  -TenantId "<your-tenant-id>" `
-  -SubscriptionId "<your-subscription-id>" `
-  -BaseName "agentlens-prod"
+  -TenantId     "<your-tenant-id>" `
+  -AppUrl       "https://agentlens-prod.azurewebsites.net" `
+  -KeyVaultName "kv-agentlens-prod"
 ```
+
+The script accepts exactly three parameters: `-TenantId`, `-AppUrl`, and the
+optional `-KeyVaultName` (when supplied, secrets are stored in Key Vault
+automatically). It is idempotent - safe to re-run with the real `-AppUrl` once
+you know the deployed URL.
 
 The script creates:
 - **AgentLens-Reader** (service principal for data reads): ARM, Graph `User.Read.All`, Dataverse `user_impersonation`

@@ -84,4 +84,6 @@ output databaseUrlHint string = deployPostgres
   : '(not deployed - set deployPostgres=true for Azure PostgreSQL)'
 
 @description('PostgreSQL server FQDN (empty when not deployed)')
-output pgServerFqdn string = deployPostgres ? pgServer.properties.fullyQualifiedDomainName : ''
+// Constructed from the known naming pattern rather than dereferencing the
+// conditional pgServer resource (which is null when deployPostgres=false).
+output pgServerFqdn string = deployPostgres ? 'pg-${baseName}.postgres.database.azure.com' : ''
