@@ -163,7 +163,9 @@ function buildDecision(
 ): GateDecision {
   const id = `gate-decision-${randomUUID()}`;
   const signedAt = new Date().toISOString();
-  const signature = signDecision({ id, agentRef, verdict, signedAt });
+  // Pass reasons into the signature so the audit evidence is tamper-bound and
+  // verifyDecision (which re-signs with decision.reasons) produces a match.
+  const signature = signDecision({ id, agentRef, verdict, signedAt, reasons });
 
   return {
     id,

@@ -16,7 +16,9 @@
  * without throwing so the app remains functional in offline/mock mode.
  */
 
+import 'server-only';
 import type { Alert, AlertSeverity } from '@/lib/types';
+import { safeError } from '@/lib/auth/guard';
 
 // ---------------------------------------------------------------------------
 // Configuration (read from env; graceful no-op when absent)
@@ -151,16 +153,17 @@ export async function sendTeamsAlert(alert: Alert): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      console.error(`[dispatch] Teams webhook error ${res.status}: ${text}`);
+      console.error(`[dispatch] Teams webhook error ${res.status}: ${safeError(text)}`);
     } else {
       console.info('[dispatch] Teams alert sent:', alert.id, alert.type);
     }
   } catch (err) {
-    console.error('[dispatch] Teams webhook fetch failed:', err);
+    console.error('[dispatch] Teams webhook fetch failed:', safeError(err));
   }
 }
 
@@ -200,18 +203,19 @@ async function acquireGraphToken(): Promise<string | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      console.error(`[dispatch] Graph token error ${res.status}: ${text}`);
+      console.error(`[dispatch] Graph token error ${res.status}: ${safeError(text)}`);
       return null;
     }
 
     const data = await res.json() as GraphTokenResponse;
     return data.access_token;
   } catch (err) {
-    console.error('[dispatch] Graph token fetch failed:', err);
+    console.error('[dispatch] Graph token fetch failed:', safeError(err));
     return null;
   }
 }

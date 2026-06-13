@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAzureConfig } from '@/lib/ai/azureOpenAI';
 import { getArmToken, getGraphToken, clearTokenCache } from '@/lib/auth/tokenService';
+import { requireSession, safeError } from '@/lib/auth/guard';
 
 /**
  * GET /api/overview - REAL tenant posture from Azure Resource Graph + which data
@@ -21,7 +22,10 @@ async function arg(token: string, query: string): Promise<Record<string, unknown
   return (await res.json()).data ?? [];
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
   const [armToken, graphToken] = await Promise.all([getArmToken(), getGraphToken()]);
 
   const hasSp = Boolean(process.env.AZURE_CLIENT_ID && process.env.AZURE_TENANT_ID);
@@ -114,7 +118,7 @@ export async function GET() {
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = safeError(e);
     // 401 -> evict cache so next request re-acquires via SP flow
     if (msg.includes('401')) clearTokenCache();
     return NextResponse.json(
@@ -128,7 +132,7 @@ export async function GET() {
         orphans: 0,
         resourceSummary: [],
       },
-      { status: 200 },
+      { status: 502 },
     );
   }
 }

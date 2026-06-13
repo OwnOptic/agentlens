@@ -20,6 +20,7 @@
  * @server
  */
 
+import { NextResponse } from 'next/server';
 import { getSecret } from '@/lib/config/secrets';
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,19 @@ export interface AuthUser {
 
 export type GuardResult =
   | { ok: true; user: AuthUser }
-  | { ok: false; response: Response };
+  | { ok: false; response: NextResponse<{ error: string }> };
+
+// ---------------------------------------------------------------------------
+// requireRole - convenience role check helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when the user holds the specified role.
+ * Routes may also inline their own check - this is a convenience shorthand.
+ */
+export function requireRole(user: { roles: string[] }, role: string): boolean {
+  return user.roles.includes(role);
+}
 
 // ---------------------------------------------------------------------------
 // isAuthEnabled
@@ -73,10 +86,7 @@ export async function requireSession(req: Request): Promise<GuardResult> {
     if (!secret) {
       return {
         ok: false,
-        response: new Response(
-          JSON.stringify({ error: 'Auth secret not configured' }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } },
-        ),
+        response: NextResponse.json({ error: 'Auth secret not configured' }, { status: 500 }),
       };
     }
 
@@ -91,10 +101,7 @@ export async function requireSession(req: Request): Promise<GuardResult> {
     if (!token) {
       return {
         ok: false,
-        response: new Response(
-          JSON.stringify({ error: 'Unauthorized' }),
-          { status: 401, headers: { 'Content-Type': 'application/json' } },
-        ),
+        response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
       };
     }
 
@@ -110,10 +117,7 @@ export async function requireSession(req: Request): Promise<GuardResult> {
   } catch {
     return {
       ok: false,
-      response: new Response(
-        JSON.stringify({ error: 'Auth validation failed' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } },
-      ),
+      response: NextResponse.json({ error: 'Auth validation failed' }, { status: 401 }),
     };
   }
 }
@@ -129,6 +133,9 @@ interface RateLimitBucket {
 
 const _rateBuckets = new Map<string, RateLimitBucket>();
 
+/** Monotonically incremented call counter used to schedule periodic sweeps. */
+let _rateLimitCallCount = 0;
+
 /**
  * In-memory per-key rate limiter (sliding window, resets each windowMs).
  *
@@ -140,6 +147,10 @@ const _rateBuckets = new Map<string, RateLimitBucket>();
  * intentional for a lightweight guard - use Redis/Upstash for distributed
  * production rate-limiting.
  *
+ * Unbounded-map guard: every 1000 calls a sweep deletes buckets whose window
+ * has been fully elapsed for at least 2x windowMs, preventing memory growth
+ * in long-lived processes with many distinct keys.
+ *
  * @param key       Scoping key, typically user email or IP
  * @param max       Maximum calls allowed per window
  * @param windowMs  Window duration in milliseconds
@@ -150,6 +161,17 @@ export function rateLimit(
   windowMs: number,
 ): { allowed: true } | { allowed: false; retryAfterMs: number } {
   const now = Date.now();
+
+  // Periodic sweep: purge stale buckets every 1000 calls to bound map growth.
+  _rateLimitCallCount += 1;
+  if (_rateLimitCallCount % 1000 === 0) {
+    for (const [k, b] of _rateBuckets) {
+      if (now - b.windowStart >= windowMs * 2) {
+        _rateBuckets.delete(k);
+      }
+    }
+  }
+
   const bucket = _rateBuckets.get(key);
 
   if (!bucket || now - bucket.windowStart >= windowMs) {
@@ -183,8 +205,9 @@ const SENSITIVE_PATTERNS: RegExp[] = [
   /sig=[A-Za-z0-9%+/]+=*/gi,
   // Generic secret= patterns
   /secret\s*[:=]\s*\S+/gi,
-  // API keys that look like 32+ hex chars
-  /[0-9a-f]{32,}/gi,
+  // API keys / hashes that look like 40+ hex chars (40 = SHA-1 length minimum;
+  // 32-char GUIDs and short correlation IDs are intentionally preserved)
+  /[0-9a-f]{40,}/gi,
 ];
 
 const REDACTED = '[redacted]';

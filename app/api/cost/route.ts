@@ -2,7 +2,7 @@
  * GET /api/cost
  *
  * Unified cost data endpoint.
- * Returns: { metrics, capacity, topBurners, summary }
+ * Returns: { metrics, capacity, topBurners, summary, dataSource }
  *
  * Falls back to mock data when connector fails or env vars missing.
  */
@@ -15,8 +15,10 @@ import {
   baseline30Day,
   mtdCost,
   projectedMonthly,
-  formatCost,
 } from '@/lib/cost/projections';
+import { requireSession, safeError } from '@/lib/auth/guard';
+
+export const dynamic = 'force-dynamic';
 
 interface TopBurner {
   agent: Agent;
@@ -77,7 +79,10 @@ function findTopBurners(
   return burners.slice(0, limit);
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
   try {
     // Use mock data (in production, would call connectors here)
     const metrics = mockMetrics;
@@ -114,10 +119,11 @@ export async function GET() {
         })),
         summary,
         timestamp: new Date().toISOString(),
+        dataSource: 'mock',
       },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          'Cache-Control': 'no-store',
         },
       }
     );
@@ -130,7 +136,7 @@ export async function GET() {
         capacity: mockCapacity,
         topBurners: mockMetrics
           .slice(0, 3)
-          .map((m, idx) => ({
+          .map((m) => ({
             agent: mockAgents.find(
               (a) => a.envId === m.envId && a.botId === m.botId
             ),
@@ -154,10 +160,11 @@ export async function GET() {
         },
         timestamp: new Date().toISOString(),
         fallback: true,
+        dataSource: 'mock',
       },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          'Cache-Control': 'no-store',
         },
       }
     );

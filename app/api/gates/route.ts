@@ -4,9 +4,13 @@
  * POST /api/gates
  *   Body: { agentRef: string, policyId?: string, context: PolicyContext }
  *   Returns: GateRunOutput (decision + policyResults + notification)
+ *   Requires admin role.
  *
  * GET /api/gates
- *   Returns: { policies: GatePolicy[], decisions: GateDecision[] }
+ *   Returns: { policies: GatePolicy[], decisions: GateDecision[], dataSource: 'mock' }
+ *
+ * DELETE /api/gates?id=<decisionId>
+ *   Revokes a decision. Requires admin role.
  *
  * Falls back to mock seed data when live credentials are absent.
  */
@@ -24,6 +28,9 @@ import {
   mockMaturityResults,
   mockViolations,
 } from '@/lib/mock/seed';
+import { requireSession, safeError } from '@/lib/auth/guard';
+
+export const dynamic = 'force-dynamic';
 
 // ---------------------------------------------------------------------------
 // In-memory decision store (replaces DB for offline/demo use)
@@ -38,7 +45,10 @@ const decisionStore: Map<string, GateDecision> = new Map(
 // GET /api/gates
 // ---------------------------------------------------------------------------
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
   const policies: GatePolicy[] = mockGatePolicies;
   const decisions: GateDecision[] = Array.from(decisionStore.values()).sort(
     (a, b) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime()
@@ -50,7 +60,7 @@ export async function GET(): Promise<NextResponse> {
     _signatureValid: verifyDecision(d).valid,
   }));
 
-  return NextResponse.json({ policies, decisions: annotatedDecisions }, { status: 200 });
+  return NextResponse.json({ policies, decisions: annotatedDecisions, dataSource: 'mock' }, { status: 200 });
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +74,13 @@ interface GateRequestBody {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
+  if (!guard.user.roles.includes('admin')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   let body: GateRequestBody;
 
   try {
@@ -106,7 +123,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (err) {
     console.error('[api/gates] Gate evaluation failed:', err);
     return NextResponse.json(
-      { error: 'Gate evaluation failed', detail: String(err) },
+      { error: 'Gate evaluation failed', detail: safeError(err) },
       { status: 500 }
     );
   }
@@ -118,6 +135,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 // ---------------------------------------------------------------------------
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
+  if (!guard.user.roles.includes('admin')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const id = req.nextUrl.searchParams.get('id');
 
   if (!id) {

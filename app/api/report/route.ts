@@ -13,6 +13,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildWeeklyReportFromMock } from '@/lib/reporting/weekly';
 import { computeExecPostureFromMock } from '@/lib/reporting/exec';
+import { requireSession, safeError } from '@/lib/auth/guard';
+
+export const dynamic = 'force-dynamic';
 
 type ReportFormat = 'markdown' | 'html' | 'json';
 
@@ -22,12 +25,18 @@ function resolveFormat(raw: string | null): ReportFormat {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(request);
+  if (!guard.ok) return guard.response;
+
   const { searchParams } = new URL(request.url);
   const format = resolveFormat(searchParams.get('format'));
   return serveReport(format);
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(request);
+  if (!guard.ok) return guard.response;
+
   let format: ReportFormat = 'json';
   try {
     const body = (await request.json()) as { format?: string };
@@ -64,6 +73,7 @@ function serveReport(format: ReportFormat): NextResponse {
             errorRateTrend: posture.errorRateTrend,
             generatedAt: posture.generatedAt,
           },
+          dataSource: 'mock',
         },
         {
           status: 200,
@@ -97,7 +107,7 @@ function serveReport(format: ReportFormat): NextResponse {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = safeError(err);
     return NextResponse.json({ error: 'Report generation failed', detail: message }, { status: 500 });
   }
 }

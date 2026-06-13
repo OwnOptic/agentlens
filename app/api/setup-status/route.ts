@@ -9,7 +9,7 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { requireSession } from '@/lib/auth/guard';
+import { requireSession, safeError } from '@/lib/auth/guard';
 import { runAllProbes } from '@/lib/setup/probes';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const status = await runAllProbes(forceRefresh);
     return NextResponse.json(status);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = safeError(err);
     return NextResponse.json(
       { error: 'Probe battery failed unexpectedly', detail: msg },
       { status: 500 },

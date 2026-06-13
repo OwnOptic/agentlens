@@ -31,7 +31,8 @@ function HealthPage() {
         if (!response.ok) {
           throw new Error('Failed to fetch health metrics');
         }
-        const data: HealthMetric[] = await response.json();
+        const body = await response.json() as { metrics: HealthMetric[] };
+        const data: HealthMetric[] = body.metrics ?? [];
         setMetrics(data);
 
         // Compute per-agent summaries

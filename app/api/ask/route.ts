@@ -82,7 +82,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!guard.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   // Per-user rate limit: 30 requests per minute
-  const rateLimitKey = guard.user.email ?? guard.user.name ?? 'anonymous';
+  const rateLimitKey =
+    guard.user.email ??
+    guard.user.name ??
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    'anonymous';
   const rl = rateLimit(rateLimitKey, 30, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -109,6 +113,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
   if (!question) return NextResponse.json({ error: 'question is required' }, { status: 400 });
+  if (question.length > 2000) return NextResponse.json({ error: 'question exceeds 2000 character limit' }, { status: 400 });
 
   try {
     const { context, live } = await buildLiveContext();

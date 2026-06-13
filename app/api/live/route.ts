@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireSession, safeError } from '@/lib/auth/guard';
 
 /**
  * LIVE data route - queries the real MVP tenant via Azure Resource Graph.
@@ -26,7 +27,10 @@ async function arg(token: string, query: string) {
   return json.data ?? [];
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
   const token = process.env.MVP_ARM_TOKEN;
   if (!token) {
     return NextResponse.json(
@@ -67,7 +71,7 @@ export async function GET() {
     );
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e), hint: 'The token likely expired (~60-90 min) - re-run the login.' },
+      { error: safeError(e), hint: 'The token likely expired (~60-90 min) - re-run the login.' },
       { status: 502 },
     );
   }

@@ -240,7 +240,8 @@ export default function AlertsPage() {
       if (filterSeverity !== 'all') params.set('severity', filterSeverity);
       const res = await fetch(`/api/alerts?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as Alert[];
+      const body = await res.json() as { alerts: Alert[] };
+      const data = body.alerts ?? [];
       // Client-side sort: critical first, then createdAt desc
       data.sort((a, b) => {
         const sd = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];

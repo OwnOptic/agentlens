@@ -14,7 +14,7 @@ import type { DefaultJWT } from 'next-auth/jwt';
 declare module 'next-auth' {
   interface Session {
     user: DefaultSession['user'] & {
-      /** Entra app roles. Defaults to ['admin'] when no roles are assigned. */
+      /** Entra app roles. Defaults to ['viewer'] when no roles are assigned. */
       roles: string[];
     };
   }
@@ -24,7 +24,5 @@ declare module 'next-auth/jwt' {
   interface JWT extends DefaultJWT {
     /** Entra app roles forwarded from the ID token 'roles' claim. */
     roles?: string[];
-    /** Cached resolved client secret (never surfaced in the session). */
-    _clientSecret?: string;
   }
 }

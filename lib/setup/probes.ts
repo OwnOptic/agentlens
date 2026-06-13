@@ -11,7 +11,7 @@
 
 import type { SetupCheck, SetupStatus } from '@/lib/setup/types';
 import { getSecretSourceMap } from '@/lib/config/secrets';
-import { isAuthEnabled } from '@/lib/auth/guard';
+import { isAuthEnabled, safeError } from '@/lib/auth/guard';
 import { getAzureConfig } from '@/lib/ai/azureOpenAI';
 
 // ---------------------------------------------------------------------------
@@ -327,7 +327,8 @@ async function probeAzureOpenAIConfigured(): Promise<SetupCheck> {
     label: 'Azure OpenAI configured',
     area: 'ai',
     status: 'ok',
-    detail: `Endpoint: ${cfg.endpoint}, Deployment: ${cfg.deployment}.`,
+    // Do not include endpoint URL or deployment name in the browser-visible detail.
+    detail: 'Azure OpenAI endpoint and deployment configured.',
   };
 }
 
@@ -439,7 +440,8 @@ async function probeKeyVault(): Promise<SetupCheck> {
         label: 'Azure Key Vault configured (KEY_VAULT_URI)',
         area: 'storage',
         status: 'error',
-        detail: `KEY_VAULT_URI is set (${kvUri}) but no secrets were resolved from Key Vault. Check credentials and secret names.`,
+        // Do not echo the KV URI into the browser-visible detail.
+        detail: 'KEY_VAULT_URI is set but no secrets were resolved from Key Vault. Check credentials and secret names.',
         fix: 'az keyvault secret list --vault-name <vault> — verify secret names match the expected convention (e.g. AZURE-CLIENT-SECRET).',
       };
     }
@@ -448,16 +450,16 @@ async function probeKeyVault(): Promise<SetupCheck> {
       label: 'Azure Key Vault configured (KEY_VAULT_URI)',
       area: 'storage',
       status: 'ok',
-      detail: `Key Vault connected (${kvUri}). ${kvHits} secret(s) resolved from Key Vault.`,
+      // Do not include the vault URI in browser-visible output.
+      detail: `Key Vault reachable. ${kvHits} secret(s) resolved from Key Vault.`,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
     return {
       key: 'storage_keyvault',
       label: 'Azure Key Vault configured (KEY_VAULT_URI)',
       area: 'storage',
       status: 'error',
-      detail: `Key Vault probe failed: ${msg.slice(0, 200)}`,
+      detail: `Key Vault probe failed: ${safeError(err).slice(0, 200)}`,
       fix: 'Ensure the identity running the app has Key Vault Secrets Reader role: az role assignment create --role "Key Vault Secrets User" --assignee <principalId> --scope <kvResourceId>',
     };
   }

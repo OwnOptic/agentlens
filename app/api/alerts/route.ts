@@ -3,6 +3,7 @@
  * POST /api/alerts/run     - Re-evaluate alert rules against current mock data
  * PATCH /api/alerts/[id]   - Handled in /api/alerts/[id]/route.ts (not this file)
  * POST /api/alerts         - Bulk operations: { action: 'ack' | 'resolve', ids: string[] }
+ *                            action='run' requires admin role.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,6 +11,9 @@ import type { Alert, AlertSeverity } from '@/lib/types';
 import { mockAlerts, mockAgents, mockMetrics, mockCapacity, mockEnvironments } from '@/lib/mock/seed';
 import { evaluateAlerts } from '@/lib/alerts/engine';
 import { dispatchAlerts } from '@/lib/alerts/dispatch';
+import { requireSession } from '@/lib/auth/guard';
+
+export const dynamic = 'force-dynamic';
 
 // ---------------------------------------------------------------------------
 // In-memory alert store (replaces Supabase when DB is unavailable)
@@ -34,16 +38,13 @@ function getFilteredAlerts(req: NextRequest): Alert[] {
 // ---------------------------------------------------------------------------
 // GET /api/alerts
 // ---------------------------------------------------------------------------
-export async function GET(req: NextRequest): Promise<NextResponse<Alert[] | { error: string }>> {
-  try {
-    // TODO: replace in-memory store with Supabase query when DB is available
-    // const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-    // const { data, error } = await supabase.from('alerts').select('*').order('created_at', { ascending: false });
-    // if (error) throw error;
-    // return NextResponse.json(data);
+export async function GET(req: NextRequest): Promise<NextResponse<{ alerts: Alert[]; dataSource: 'mock' } | { error: string }>> {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
 
+  try {
     const filtered = getFilteredAlerts(req);
-    return NextResponse.json(filtered);
+    return NextResponse.json({ alerts: filtered, dataSource: 'mock' });
   } catch (err) {
     console.error('[GET /api/alerts]', err);
     return NextResponse.json({ error: 'Failed to fetch alerts' }, { status: 500 });
@@ -54,11 +55,14 @@ export async function GET(req: NextRequest): Promise<NextResponse<Alert[] | { er
 // POST /api/alerts
 // Two modes:
 //   body = { action: 'ack' | 'resolve', ids: string[] }  -> bulk state mutation
-//   body = { action: 'run' }                              -> re-evaluate rules
+//   body = { action: 'run' }                              -> re-evaluate rules (admin only)
 // ---------------------------------------------------------------------------
 export async function POST(
   req: NextRequest,
 ): Promise<NextResponse<{ updated: number } | { generated: number; alerts: Alert[] } | { error: string }>> {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
   try {
     const body = await req.json() as unknown;
 
@@ -92,8 +96,12 @@ export async function POST(
       return NextResponse.json({ updated: count });
     }
 
-    // Re-evaluate rules
+    // Re-evaluate rules - admin only
     if (action === 'run') {
+      if (!guard.user.roles.includes('admin')) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
       const baselines = {
         budget_monthly_limit: 1000,
         high_consumption_threshold: 20,
@@ -141,6 +149,13 @@ export async function POST(
 export async function PATCH(
   req: NextRequest,
 ): Promise<NextResponse<Alert | { error: string }>> {
+  const guard = await requireSession(req);
+  if (!guard.ok) return guard.response;
+
+  if (!guard.user.roles.includes('admin')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
     const body = await req.json() as unknown;
     if (

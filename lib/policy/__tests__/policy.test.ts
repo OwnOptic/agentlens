@@ -10,6 +10,7 @@
  *   - Mock seed alignment (real seed policies evaluate against seed agents)
  */
 
+import { describe, it, expect } from 'vitest';
 import { parsePolicy } from '../schema';
 import { evaluate } from '../evaluator';
 import { runGate } from '../gates';
@@ -115,6 +116,44 @@ rules:
     expect(pilotPolicy).toBeDefined();
     const parsed = parsePolicy(pilotPolicy!.yaml);
     expect(parsed.rules.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // T-006/303: blank line inside a rule block still parses all properties
+  // SKIP until T-303 (Phase 3) fixes the hand-rolled YAML parser's blank-line
+  // handling. The parser currently treats a blank line inside a rule block as a
+  // dedent and truncates the value. Un-skip when T-303 lands.
+  it.skip('parses a rule block that contains a blank line between properties', () => {
+    const yaml = `---
+name: blank-line-gate
+version: "1.0"
+rules:
+  - id: rule-with-blank
+
+    description: Rule with a blank line between properties
+    condition: agent.state == "Active"
+
+    blocking: true
+`;
+    const policy = parsePolicy(yaml);
+    expect(policy.name).toBe('blank-line-gate');
+    expect(policy.rules).toHaveLength(1);
+    expect(policy.rules[0].id).toBe('rule-with-blank');
+    expect(policy.rules[0].blocking).toBe(true);
+    expect(policy.rules[0].condition).toBe('agent.state == "Active"');
+  });
+
+  // T-006/303: a policy with no 'rules:' key - assert current evaluator behavior
+  // TODO: consider adding an explicit validation step in parsePolicy that
+  // returns a structured error when 'rules' is absent, rather than relying on
+  // downstream failures.
+  // SKIP until T-303 (Phase 3) adds explicit "no rules" validation to parsePolicy
+  // (today it silently returns an empty rules array, which would pass everything).
+  it.skip('throws or is reported invalid when the rules key is absent', () => {
+    const yaml = `---
+name: no-rules-gate
+version: "1.0"
+`;
+    expect(() => parsePolicy(yaml)).toThrow();
   });
 });
 
@@ -401,7 +440,7 @@ describe('runGate', () => {
       policyId: 'gate-policy-nonexistent',
     });
     expect(output.decision.verdict).toBe('pass');
-    expect(output.notification).toMatch(/no enabled policies/i);
+    expect(output.notification).toMatch(/no enabled (gate )?policies/i);
   });
 
   it('returns advisory mode notification text', async () => {
@@ -463,6 +502,7 @@ describe('signing', () => {
     agentRef: 'env-uat-22222222/bot-uat-finance-fff',
     verdict: 'pass' as const,
     signedAt: '2026-06-12T10:00:00.000Z',
+    reasons: [] as string[],
   };
 
   it('produces a non-empty hex signature', () => {
@@ -536,5 +576,29 @@ describe('signing', () => {
     });
     const verifyResult = verifyDecision(output.decision);
     expect(verifyResult.valid).toBe(true);
+  });
+
+  // T-006: tampering with reasons after signing invalidates the signature
+  it('tampered reasons after signing makes verifyDecision return invalid', () => {
+    const payloadWithReasons = {
+      ...payload,
+      reasons: ['BLOCK [blocking-r] Auth mode must not be anonymous'],
+    };
+    const sig = signDecision(payloadWithReasons);
+    const decision = {
+      ...payloadWithReasons,
+      signature: sig,
+      revoked: false,
+    };
+
+    // Verify the original is valid
+    expect(verifyDecision(decision).valid).toBe(true);
+
+    // Tamper: replace reasons with different content
+    const tampered = {
+      ...decision,
+      reasons: ['BLOCK [blocking-r] Some other reason injected by attacker'],
+    };
+    expect(verifyDecision(tampered).valid).toBe(false);
   });
 });

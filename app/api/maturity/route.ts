@@ -3,6 +3,7 @@
  *
  * GET  /api/maturity          -> full MaturityAssessment (mock-backed)
  * GET  /api/maturity?pillar=X -> single PillarAssessment
+ * POST /api/maturity          -> re-score with questionnaire answers (admin only)
  *
  * Falls back to mock seed when no live connectors are available so the
  * app runs fully offline during development.
@@ -12,6 +13,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateAssessment } from '@/lib/maturity/report';
 import { buildTelemetrySignals } from '@/lib/maturity/scoring';
 import { PILLARS, type Pillar } from '@/lib/maturity/controls';
+import { requireSession, safeError } from '@/lib/auth/guard';
+
+export const dynamic = 'force-dynamic';
 
 // ---------------------------------------------------------------------------
 // Helper: attempt to load live signals; fall back to mock
@@ -28,6 +32,9 @@ function getSignals() {
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(request);
+  if (!guard.ok) return guard.response;
+
   const { searchParams } = request.nextUrl;
   const pillarParam = searchParams.get('pillar');
 
@@ -54,12 +61,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           { status: 404 },
         );
       }
-      return NextResponse.json(pillarData);
+      return NextResponse.json({ ...pillarData, dataSource: 'mock' });
     }
 
-    return NextResponse.json(assessment);
+    return NextResponse.json({ ...assessment, dataSource: 'mock' });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
+    const message = safeError(err);
     return NextResponse.json(
       { error: 'internal_error', message },
       { status: 500 },
@@ -79,6 +86,13 @@ interface QuestionnaireBody {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(request);
+  if (!guard.ok) return guard.response;
+
+  if (!guard.user.roles.includes('admin')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   let body: QuestionnaireBody;
   try {
     body = (await request.json()) as QuestionnaireBody;
@@ -94,9 +108,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       weeklyDigestCirculated: body.weeklyDigestCirculated ?? null,
     });
     const assessment = generateAssessment(signals);
-    return NextResponse.json(assessment);
+    return NextResponse.json({ ...assessment, dataSource: 'mock' });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
+    const message = safeError(err);
     return NextResponse.json(
       { error: 'internal_error', message },
       { status: 500 },

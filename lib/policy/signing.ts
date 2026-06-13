@@ -15,7 +15,7 @@
  * intact - revoking does NOT delete or re-sign.
  */
 
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, createHash, timingSafeEqual } from 'crypto';
 import type { GateDecision } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -27,10 +27,28 @@ const DEV_FALLBACK_KEY = 'agentlens-dev-gate-signing-key-do-not-use-in-prod';
 
 /**
  * Get the active signing key.
- * Priority: GATE_SIGNING_KEY env var > DEV_FALLBACK_KEY.
+ * Priority: GATE_SIGNING_KEY env var > DEV_FALLBACK_KEY (dev/test only).
+ *
+ * Production fail-fast: if GATE_SIGNING_KEY is absent in a non-dev/test
+ * environment, we throw rather than silently signing with the insecure
+ * fallback key (which would produce signatures that look valid but offer no
+ * tamper protection). The check is LAZY - it fires on the first sign/verify
+ * call at runtime, NOT at module load, so it does not break `next build`
+ * (which imports this module with NODE_ENV=production but never signs).
  */
 function getSigningKey(): string {
-  return process.env.GATE_SIGNING_KEY ?? DEV_FALLBACK_KEY;
+  const key = process.env.GATE_SIGNING_KEY;
+  if (!key) {
+    const env = process.env.NODE_ENV;
+    if (env !== 'development' && env !== 'test') {
+      throw new Error(
+        '[signing] GATE_SIGNING_KEY is required in production. ' +
+        'Set GATE_SIGNING_KEY to a cryptographically random hex string (e.g. openssl rand -hex 32).',
+      );
+    }
+    return DEV_FALLBACK_KEY;
+  }
+  return key;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,14 +61,34 @@ export interface SignablePayload {
   agentRef: string;
   verdict: 'pass' | 'block';
   signedAt: string;
+  /**
+   * Decision reasons. When provided, a sorted SHA-256 hash is committed into
+   * the canonical payload so any tampering with reasons invalidates the signature.
+   * Defaults to [] when omitted (backward-compatible with existing call sites).
+   */
+  reasons?: string[];
+}
+
+/**
+ * Compute a stable hash of the reasons array: sorted so order doesn't matter,
+ * JSON-serialised so the content is fully committed to the signature.
+ * An absent or empty reasons array hashes to a consistent empty-array digest.
+ */
+function hashReasons(reasons: string[] | undefined): string {
+  return createHash('sha256')
+    .update(JSON.stringify([...(reasons ?? [])].sort()))
+    .digest('hex');
 }
 
 /**
  * Serialise the signable payload to a canonical string.
- * Format: "{id}:{agentRef}:{verdict}:{signedAt}"
+ * Format: "{id}:{agentRef}:{verdict}:{signedAt}:{reasonsHash}"
+ *
+ * Including reasonsHash means any change to the reasons array (even reordering)
+ * will invalidate the signature and be detected by verifyDecision.
  */
 function canonicalPayload(p: SignablePayload): string {
-  return `${p.id}:${p.agentRef}:${p.verdict}:${p.signedAt}`;
+  return `${p.id}:${p.agentRef}:${p.verdict}:${p.signedAt}:${hashReasons(p.reasons)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,12 +127,13 @@ export type VerifyResult =
  * Implementation note: timing-safe comparison prevents side-channel attacks.
  */
 export function verifyDecision(decision: GateDecision): VerifyResult {
-  // Recompute expected signature
+  // Recompute expected signature - reasons are included so any tampering invalidates it.
   const expected = signDecision({
     id: decision.id,
     agentRef: decision.agentRef,
     verdict: decision.verdict,
     signedAt: decision.signedAt,
+    reasons: decision.reasons,
   });
 
   // Timing-safe compare (both must be same length)

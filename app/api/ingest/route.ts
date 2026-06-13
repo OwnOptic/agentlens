@@ -6,6 +6,7 @@
  *
  * Security:
  *   - Requires the `x-cron-secret` header to match the CRON_SECRET env var.
+ *   - Uses constant-time comparison (timingSafeEqual) to prevent timing attacks.
  *   - Returns 403 if the secret is missing or incorrect.
  *
  * Responses:
@@ -18,9 +19,11 @@
  * prevent accidental exposure.
  */
 
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import type { IngestionRun } from '@/lib/types';
 import { runIngestion } from '@/lib/ingestion/orchestrator';
+import { requireSession, safeError } from '@/lib/auth/guard';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   // Guard: CRON_SECRET must be configured
@@ -37,7 +40,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     request.headers.get('x-cron-secret') ??
     request.headers.get('CRON_SECRET');
 
-  if (!providedSecret || providedSecret !== expectedSecret) {
+  // Constant-time comparison to prevent timing attacks
+  const secretMatches = (() => {
+    if (!providedSecret) return false;
+    const expected = Buffer.from(expectedSecret, 'utf8');
+    const provided = Buffer.from(providedSecret, 'utf8');
+    if (expected.length !== provided.length) return false;
+    return timingSafeEqual(expected, provided);
+  })();
+
+  if (!secretMatches) {
     return NextResponse.json(
       { error: 'Forbidden: invalid or missing cron secret.' },
       { status: 403 },
@@ -52,7 +64,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ run }, { status: statusCode });
   } catch (e) {
-    const details = e instanceof Error ? e.message : String(e);
+    const details = safeError(e);
     console.error('[POST /api/ingest] Unhandled error:', details);
     return NextResponse.json(
       { error: 'Internal server error', details },
@@ -65,9 +77,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
  * GET /api/ingest
  *
  * Health-check endpoint - returns the current pipeline configuration state
- * without running ingestion. Safe to call unauthenticated.
+ * without running ingestion. Guarded by session (returns { status: 'ok' } shape only).
  */
-export async function GET(_request: NextRequest): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const guard = await requireSession(request);
+  if (!guard.ok) return guard.response;
+
   const configured = Boolean(
     process.env.AZURE_CLIENT_ID &&
       process.env.AZURE_CLIENT_SECRET &&

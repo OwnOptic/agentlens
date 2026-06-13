@@ -79,6 +79,11 @@ export const authOptions: NextAuthOptions = {
 
   session: {
     strategy: 'jwt',
+    maxAge: 8 * 60 * 60, // 8 hours
+  },
+
+  jwt: {
+    maxAge: 8 * 60 * 60, // 8 hours
   },
 
   // NextAuth v4: process.env.AUTH_SECRET is read synchronously at startup.
@@ -95,13 +100,11 @@ export const authOptions: NextAuthOptions = {
      * single-tenant deployments with no role assignments work out of the box.
      */
     async jwt({ token, account, profile }): Promise<JWT> {
-      // Resolve and cache the KV secret on first sign-in (async-safe here)
+      // Resolve and cache the KV secret on first sign-in (warms the module cache).
+      // NOTE: the resolved secret is intentionally NOT stored in the JWT payload -
+      // storing credentials inside a user-visible token is a security anti-pattern.
       if (account) {
-        const secret = await resolveClientSecret();
-        if (secret) {
-          // Store for downstream use; do not expose as-is in the session
-          token._clientSecret = secret;
-        }
+        await resolveClientSecret();
 
         // profile is the raw Entra ID token payload on first sign-in.
         // Default-DENY: when the token carries no app-role claim, fall back to
@@ -110,10 +113,15 @@ export const authOptions: NextAuthOptions = {
         // normally carries an explicit Admin/Maker claim; this fallback only
         // guards the edge case of a missing claim and must never over-grant.
         const rawProfile = profile as Record<string, unknown> | undefined;
-        const roles =
+        let roles: string[] =
           Array.isArray(rawProfile?.['roles']) && rawProfile['roles'].length > 0
             ? (rawProfile['roles'] as string[])
             : ['viewer'];
+
+        // Validate roles against the allowlist to reject unexpected or injected claims.
+        const VALID = new Set(['admin', 'maker', 'viewer']);
+        roles = roles.filter((r) => typeof r === 'string' && VALID.has(r));
+        if (!roles.length) roles = ['viewer'];
 
         token.roles = roles;
       }
@@ -131,7 +139,7 @@ export const authOptions: NextAuthOptions = {
         user: {
           ...session.user,
           // roles flows from jwt -> session
-          roles: Array.isArray(token.roles) ? (token.roles as string[]) : ['admin'],
+          roles: Array.isArray(token.roles) ? (token.roles as string[]) : ['viewer'],
         },
       };
     },
