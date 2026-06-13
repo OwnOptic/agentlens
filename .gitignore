@@ -42,3 +42,6 @@ yarn-error.log*
 # agent + build artifacts
 .claude/
 BUILD_SUMMARY.txt
+
+# Local deploy artifact
+deploy.zip
