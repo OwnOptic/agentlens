@@ -20,8 +20,12 @@
          - Client secret in KV as WEBAPP-CLIENT-SECRET.
          - Random 32-byte AUTH-SECRET in KV.
 
-    The script is IDEMPOTENT: if an app with the same displayName already
-    exists it reuses it rather than creating a duplicate.
+    The script is IDEMPOTENT for the app registrations themselves: if an app
+    with the same displayName already exists it is reused, not duplicated, and
+    redirect URIs / ID-token / appRoles / assignment-required are re-applied.
+    EXCEPTION: client secrets are created in --append mode, so each run adds a
+    NEW secret (existing secrets stay valid - safe for live deployments, but
+    prune stale secrets periodically in the portal).
 
     At the end it prints a MANUAL STEPS section and a ready-to-paste
     .env.local block so the operator has everything in one place.
@@ -91,11 +95,14 @@ function Find-AppByName([string]$Name) {
 }
 
 # Create a client secret and return the secret value string.
+# Uses --append so re-running the script ADDS a new secret rather than
+# invalidating any secret already in use by a live deployment.
 function New-AppSecret([string]$AppId, [string]$Description) {
-    Write-Step "Creating client secret '$Description' on app $AppId"
+    Write-Step "Creating client secret '$Description' on app $AppId (append mode)"
     $raw = az ad app credential reset `
         --id $AppId `
         --display-name $Description `
+        --append `
         --years 2 `
         --query "password" -o tsv
     return $raw.Trim()
@@ -198,16 +205,21 @@ Write-Warn "NOTE: CopilotPackages.Read.All (Agent 365 license required) is inten
 Write-Warn "      NOT requested. Enable it in the app registration manually once the tenant"
 Write-Warn "      has Agent 365 licenses assigned."
 
-# Admin-consent Graph permissions for the tenant
+# Admin-consent the Graph APPLICATION permission for the tenant.
+# Note: User.Read.All is an application role, NOT a delegated scope, so the
+# correct mechanism is admin-consent (which creates an appRoleAssignment).
+# `az ad app permission grant` is for delegated oauth2 scopes and is NOT used here.
+# A short wait absorbs Entra replication lag between `permission add` and consent.
+Write-Step "Waiting for permission to replicate before admin consent"
+Start-Sleep -Seconds 20
 Write-Step "Granting admin consent for $readerName Graph permissions (requires Global Admin)"
-az ad app permission grant `
-    --id $readerAppId `
-    --api $graphResourceId `
-    --scope "" `
-    --output none 2>$null
-# az ad app permission admin-consent succeeds only with an admin account
 az ad app permission admin-consent --id $readerAppId --output none 2>$null
-Write-Done "Admin consent applied (or queued - verify in Entra portal under API permissions)."
+if ($LASTEXITCODE -ne 0) {
+    Write-Warn "Automatic admin-consent did not complete (needs a Global Admin session)."
+    Write-Warn "Grant it manually - see MANUAL STEP 2 below."
+} else {
+    Write-Done "Admin consent applied. Verify green ticks in the Entra portal (API permissions)."
+}
 
 # ---- Client secret ----
 $readerSecret = New-AppSecret -AppId $readerAppId -Description "AgentLens-Reader automated"
@@ -232,11 +244,13 @@ if ($null -ne $webApp) {
     $webObjectId  = $webApp.id
 } else {
     Write-Step "Creating app registration '$webAppName'"
+    # NOTE: pass the literal lowercase string 'true' - a PowerShell $true would
+    # stringify to 'True', which az CLI rejects (invalid choice).
     $webCreated = az ad app create `
         --display-name $webAppName `
         --sign-in-audience "AzureADMyOrg" `
         --web-redirect-uris $callbackProd $callbackLocal `
-        --enable-id-token-issuance $true `
+        --enable-id-token-issuance true `
         --query "{appId:appId, id:id}" -o json | ConvertFrom-Json
     $webAppId    = $webCreated.appId
     $webObjectId = $webCreated.id
@@ -251,13 +265,38 @@ az ad app update `
     --output none
 Write-Done "Redirect URIs set."
 
-# Enable ID tokens (required by next-auth implicit flow)
+# Enable ID tokens (required by next-auth). Literal 'true' (see note above).
 Write-Step "Enabling ID token issuance"
 az ad app update `
     --id $webAppId `
-    --enable-id-token-issuance $true `
+    --enable-id-token-issuance true `
     --output none
 Write-Done "ID tokens enabled."
+
+# The WebApp needs a service principal (enterprise application) in the tenant so
+# that users/groups can be assigned the Admin/Maker roles and so sign-in can be
+# restricted to assigned users. A single-tenant app would lazily create this on
+# first consent, but we create it explicitly to make role assignment work now.
+$webSpObjectId = az ad sp show --id $webAppId --query "id" -o tsv 2>$null
+if ([string]::IsNullOrEmpty($webSpObjectId)) {
+    Write-Step "Creating service principal (enterprise app) for $webAppName"
+    $webSpObjectId = az ad sp create --id $webAppId --query "id" -o tsv
+    Write-Done "Enterprise application created (objectId $webSpObjectId)."
+} else {
+    Write-Done "Enterprise application already exists (objectId $webSpObjectId)."
+}
+
+# Require explicit role assignment to sign in. Without this ANY tenant user can
+# authenticate; combined with role defaults that would over-grant access. With it,
+# only users assigned Admin or Maker can sign in.
+Write-Step "Enforcing 'assignment required' on the enterprise application"
+az ad sp update --id $webSpObjectId --set appRoleAssignmentRequired=true --output none 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Warn "Could not set appRoleAssignmentRequired automatically - set 'Assignment required = Yes'"
+    Write-Warn "manually under Enterprise applications -> $webAppName -> Properties."
+} else {
+    Write-Done "Assignment required enforced (only Admin/Maker users can sign in)."
+}
 
 # ---- appRoles (Admin + Maker) ----
 Write-Step "Setting appRoles (Admin, Maker)"
@@ -283,9 +322,13 @@ $appRolesJson = @"
 ]
 "@
 
-# Write to a temp file to avoid shell quoting issues
-$rolesFile = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.json'
-$appRolesJson | Set-Content -Path $rolesFile -Encoding utf8
+# Write to a temp file to avoid shell quoting issues.
+# Use .NET WriteAllText (no BOM): Windows PowerShell 5.1 `Set-Content -Encoding utf8`
+# emits a UTF-8 BOM, which az CLI's @file JSON parser chokes on.
+$rolesFile = [System.IO.Path]::Combine(
+    [System.IO.Path]::GetTempPath(),
+    "agentlens-approles-$([System.Guid]::NewGuid().ToString('N')).json")
+[System.IO.File]::WriteAllText($rolesFile, $appRolesJson)
 
 az ad app update `
     --id $webAppId `
@@ -327,8 +370,9 @@ Write-Host "   session.  Confirm green ticks appear here:" -ForegroundColor Gray
 Write-Host "   https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/CallAnAPI/appId/$readerAppId" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "3. ASSIGN ROLES to users in AgentLens-WebApp" -ForegroundColor White
-Write-Host "   Users need the 'Admin' or 'Maker' role assigned to sign in." -ForegroundColor Gray
-Write-Host "   https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Users/objectId/$webObjectId/appId/$webAppId" -ForegroundColor Cyan
+Write-Host "   Assignment is REQUIRED (enforced above) - only assigned users can sign in." -ForegroundColor Gray
+Write-Host "   Each user needs the 'Admin' or 'Maker' role." -ForegroundColor Gray
+Write-Host "   https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Users/objectId/$webSpObjectId/appId/$webAppId" -ForegroundColor Cyan
 Write-Host "   -> Add user/group -> Select role (Admin or Maker)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "4. (If using Key Vault + Managed Identity in production)" -ForegroundColor White

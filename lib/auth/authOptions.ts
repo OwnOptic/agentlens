@@ -103,12 +103,17 @@ export const authOptions: NextAuthOptions = {
           token._clientSecret = secret;
         }
 
-        // profile is the raw Entra ID token payload on first sign-in
+        // profile is the raw Entra ID token payload on first sign-in.
+        // Default-DENY: when the token carries no app-role claim, fall back to
+        // the least-privileged 'viewer' role rather than 'admin'. The enterprise
+        // app enforces "assignment required", so a legitimately signed-in user
+        // normally carries an explicit Admin/Maker claim; this fallback only
+        // guards the edge case of a missing claim and must never over-grant.
         const rawProfile = profile as Record<string, unknown> | undefined;
         const roles =
-          Array.isArray(rawProfile?.['roles'])
+          Array.isArray(rawProfile?.['roles']) && rawProfile['roles'].length > 0
             ? (rawProfile['roles'] as string[])
-            : ['admin'];
+            : ['viewer'];
 
         token.roles = roles;
       }
