@@ -1,3 +1,12 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
+// Next.js dev-mode (React Fast Refresh / HMR) evaluates strings as JavaScript,
+// which requires 'unsafe-eval'. We allow it ONLY in development so the client's
+// `npm run dev` quick-start works; production keeps the strict policy below.
+const scriptSrc = isDev
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline'";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -28,7 +37,7 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
