@@ -33,6 +33,8 @@ import {
   PageHeader,
   SectionTitle,
   Button,
+  InfoTip,
+  DataSourceBadge,
 } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
@@ -533,6 +535,7 @@ export default function ReleaseGatesPage() {
         tone="emerald"
         title="Release Gates"
         subtitle="Advisory gate checks for agent promotion. All decisions are HMAC-signed for audit trail integrity. Gate is always advisory - it notifies but never force-blocks."
+        badge={<DataSourceBadge state="demo" source="sample data" />}
         actions={
           <Button icon={RefreshCw} variant="ghost" onClick={loadData}>
             Refresh
@@ -551,32 +554,60 @@ export default function ReleaseGatesPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          icon={FileText}
-          label="Policies"
-          value={policies.length}
-          tone="sky"
-          sublabel={`${enabledPolicies} enabled`}
-        />
-        <StatCard
-          icon={ClipboardList}
-          label="Total Decisions"
-          value={auditDecisions.length}
-          tone="slate"
-        />
-        <StatCard
-          icon={DoorClosed}
-          label="Blocked"
-          value={activeBlocked}
-          tone={activeBlocked > 0 ? 'red' : 'emerald'}
-          sublabel="active (not revoked)"
-        />
-        <StatCard
-          icon={RotateCcw}
-          label="Revoked"
-          value={revokedCount}
-          tone={revokedCount > 0 ? 'amber' : 'slate'}
-        />
+        <div className="relative">
+          <StatCard
+            icon={FileText}
+            label="Policies"
+            value={policies.length}
+            tone="sky"
+            sublabel={`${enabledPolicies} enabled`}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Policies">
+              Number of release gate policies. Sample data until live gate system wired.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={ClipboardList}
+            label="Total Decisions"
+            value={auditDecisions.length}
+            tone="slate"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Total Decisions">
+              All gate decisions recorded. Sample data.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={DoorClosed}
+            label="Blocked"
+            value={activeBlocked}
+            tone={activeBlocked > 0 ? 'red' : 'emerald'}
+            sublabel="active (not revoked)"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Blocked Decisions">
+              Active gate blocks (advisory only). Sample data.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={RotateCcw}
+            label="Revoked"
+            value={revokedCount}
+            tone={revokedCount > 0 ? 'amber' : 'slate'}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Revoked Decisions">
+              Audit records of revoked decisions. Sample data.
+            </InfoTip>
+          </div>
+        </div>
       </div>
 
       {/* Runner */}

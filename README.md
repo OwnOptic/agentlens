@@ -1,10 +1,82 @@
-# AgentLens v2
+# AgentLens
 
-**A standalone, install-light governance & observability webapp for Microsoft Copilot Studio agents.**
+AgentLens is a standalone Next.js governance and observability dashboard for
+Microsoft Copilot Studio agents.  It connects to your Power Platform tenant
+through one Entra service principal, surfaces every agent across all environments
+in one view (inventory, compliance, maturity, release gates, AI assistant), and
+installs without importing a Dataverse solution.
 
-AgentLens surfaces every Copilot Studio agent across a Power Platform tenant in one dashboard - inventory, cost, capacity, compliance, maturity, health - with proactive alerting, policy-as-code release gates, and an AI assistant grounded on your real tenant data. It runs as a Next.js web app (not a Power Platform solution), reads through **one Entra app registration**, and installs in minutes with no Dataverse import into your environments.
+> **Honesty principle.** The app runs on demo data out of the box and says so.
+> Every page that requires a live connection shows an honest "not connected"
+> state rather than fabricating numbers.  Real data flows once the two app
+> registrations and env vars are configured.
 
-> Status: **v2 beta.** The full surface is built and runs on realistic demo data; the **Live (MVP)** page and **Ask AI** answer over **real tenant data** via Azure Resource Graph. See [Data sources](#data-sources--honesty).
+---
+
+## Quick start
+
+```bash
+git clone https://github.com/YOUR-ORG/agentlens.git
+cd agentlens
+npm install
+npm run dev        # http://localhost:3000  - demo data, no credentials needed
+```
+
+The app is fully navigable on demo data.  Nothing breaks without credentials;
+pages that need live connections display a setup prompt.
+
+---
+
+## Production deploy
+
+See **[docs/PLAN-DEPLOY.md](docs/PLAN-DEPLOY.md)** for the four-step path:
+
+1. Run the provisioning script (app registrations + Key Vault secrets).
+2. Deploy to Azure App Service with a system-assigned managed identity.
+3. Point the managed identity at the Key Vault (`Key Vault Secrets User` role).
+4. Set the non-secret app settings (`AZURE_TENANT_ID`, `NEXTAUTH_URL`, etc.).
+
+---
+
+## App registrations
+
+Two Entra app registrations are required.
+
+| Registration | Purpose |
+|---|---|
+| **AgentLens-Reader** | Service principal for data reads (Azure Resource Graph, Microsoft Graph).  Uses client credentials; the Power Platform Administrator directory role grants ARG inventory access. |
+| **AgentLens-WebApp** | Entra SSO for the web app (next-auth).  Issues ID tokens; no API permissions needed.  Two roles: `admin` and `maker`. |
+
+Provision both with one script:
+
+```powershell
+.\scripts\provision-app-registrations.ps1 `
+    -TenantId    "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -AppUrl      "https://agentlens.azurewebsites.net" `
+    -KeyVaultName "agentlens-kv"
+```
+
+The script is idempotent (safe to re-run).  It prints the four manual steps
+that cannot be automated (Power Platform Administrator role assignment, admin
+consent verification, user role assignment, managed identity Key Vault access).
+
+Full permission matrix, least-privilege justification, and security reviewer
+FAQ: **[docs/APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md)**.
+
+---
+
+## Security model
+
+- **Secrets** - all in Azure Key Vault; the App Service reads them via managed
+  identity.  No secret in code, no secret in app settings, `.env.local` is
+  gitignored.
+- **Read-only posture** - AgentLens never writes to client Power Platform
+  environments.  The only permissions are `User.Read.All` (Graph) and the
+  PP-Admin directory role (ARG reads).
+- **SSO** - users sign in via Entra; role assignment (`admin`/`maker`) is
+  required before access is granted.
+- **Data egress** - limited to the app's own Supabase DB and the configured
+  Teams webhook URL.  No message content is read or stored.
 
 ---
 
@@ -36,40 +108,31 @@ The durable wedge is the **standalone form + proactive + stateful** pieces the i
 - **Ask AI — Azure OpenAI** (secret-key), grounded on live ARG data.
 - **Auth — one Entra service principal** with Power Platform Admin role + admin-consented Graph; app login via Entra SSO.
 
-See [docs/PLAN.md](docs/PLAN.md) for the full design, phases, decisions, and risks.
-
-## Quick start
-
-```bash
-npm install
-cp .env.example .env.local      # then fill in the values below
-npm run dev                     # http://localhost:3000
-```
-
-The app runs out of the box on **demo data**. To light up the live + AI features, set the env vars below.
+See [docs/PLAN-DEPLOY.md](docs/PLAN-DEPLOY.md) for the full deployment plan and [docs/PLAN.md](docs/PLAN.md) for design decisions and risks.
 
 ## Configuration (`.env.local`)
 
 | Variable | Purpose | Needed for |
 |---|---|---|
 | `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | App data store | persistence |
-| `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | Service principal (ARG/Graph) | live inventory in prod |
-| `MVP_ARM_TOKEN` | A management.azure.com token (dev shortcut for the Live page) | Live (MVP) page |
+| `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | AgentLens-Reader SP credentials | live inventory |
+| `AZURE_AD_CLIENT_ID` / `AZURE_AD_CLIENT_SECRET` | AgentLens-WebApp SSO | Entra sign-in |
+| `AUTH_SECRET` | next-auth JWT signing key | Entra sign-in |
+| `NEXTAUTH_URL` | Public app URL | Entra sign-in |
+| `KEY_VAULT_URI` | Key Vault endpoint | production (replaces all secrets above) |
 | **`AZURE_OPENAI_ENDPOINT`** | `https://<resource>.openai.azure.com` | **Ask AI** |
-| **`AZURE_OPENAI_API_KEY`** | Azure OpenAI **secret key** | **Ask AI** |
+| **`AZURE_OPENAI_API_KEY`** | Azure OpenAI secret key | **Ask AI** |
 | **`AZURE_OPENAI_DEPLOYMENT`** | chat deployment (e.g. `gpt-4o`) | **Ask AI** |
 | `AZURE_OPENAI_API_VERSION` | API version (default `2024-08-01-preview`) | Ask AI |
 | `CRON_SECRET` | guards `/api/ingest` | scheduled ingestion |
 | `TEAMS_WEBHOOK_URL` | alert delivery | alerts |
 
-### Ask AI (Azure OpenAI)
-
-The **Ask (AI)** page sends your question to `/api/ask`, which fetches **real tenant data** (Azure Resource Graph) as grounding context and asks **Azure OpenAI** to answer - using only that data, no hallucinated agents or numbers. Auth is **secret-key** (`api-key` header). To enable it, paste your Azure OpenAI endpoint, key, and deployment name into `.env.local`. Without them, the page shows a "configure Azure OpenAI" message.
+Copy `.env.example` to `.env.local` for the full annotated reference.
 
 ## Data sources & honesty
 
-- **Live (MVP)** and **Ask AI** → real tenant data via Azure Resource Graph.
-- **All other pages** → realistic demo seed data (clearly the case until connectors are pointed at your tenant).
+- **Live (MVP)** and **Ask AI** - real tenant data via Azure Resource Graph.
+- **All other pages** - realistic demo seed data (clearly labelled until connectors are pointed at your tenant).
 - Cost is labelled **estimated** (live licensing deferred). Maturity auto-scoring is **partial-capped** (telemetry never asserts full compliance). Conversation KPIs are **aggregate-only** (no message content).
 
 ## Tech

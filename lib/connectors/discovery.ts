@@ -12,6 +12,8 @@
  * reference_all_microsoft_agents_discovery for the full API map.
  */
 
+import { getArmToken, getGraphToken, getToken } from '@/lib/auth/tokenService';
+
 export type AgentPlatform =
   | 'copilot_studio'
   | 'm365_agentbuilder'
@@ -72,7 +74,7 @@ async function discoverPowerPlatform(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  const token = process.env.MVP_ARM_TOKEN;
+  const token = await getArmToken();
   if (!token) return base;
   try {
     const rows = await argQuery(
@@ -109,7 +111,7 @@ async function discoverM365(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  const token = process.env.MVP_GRAPH_TOKEN;
+  const token = await getGraphToken();
   if (!token) return base;
   try {
     // Package Management API - REQUIRES a Microsoft Agent 365 license (else 403).
@@ -125,7 +127,7 @@ async function discoverM365(): Promise<DiscoverySource> {
       id: String(it.id ?? ''),
       name: String(it.displayName ?? it.name ?? 'Unknown'),
       platform: 'm365_declarative',
-      owner: (it.publisherName ?? it.publisher) as string ?? null,
+      owner: ((it.publisherName ?? it.publisher) as string) ?? null,
       location: Array.isArray(it.elementTypes) ? (it.elementTypes as string[]).join(', ') : 'Microsoft 365',
       source: 'graph-copilotPackages',
       details: it,
@@ -147,7 +149,8 @@ async function discoverFoundry(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  const token = process.env.MVP_FOUNDRY_TOKEN;
+  // Foundry uses the ARM audience
+  const token = await getToken('https://management.azure.com/.default', 'MVP_FOUNDRY_TOKEN');
   const endpoint = process.env.MVP_FOUNDRY_PROJECT_ENDPOINT; // https://{acct}.services.ai.azure.com/api/projects/{project}
   if (!token || !endpoint) return base;
   try {
@@ -184,7 +187,8 @@ async function discoverFabric(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  const token = process.env.MVP_FABRIC_TOKEN;
+  // Fabric uses the Power BI / Fabric audience; fall back to MVP_FABRIC_TOKEN dev env
+  const token = await getToken('https://analysis.windows.net/powerbi/api/.default', 'MVP_FABRIC_TOKEN');
   if (!token) return base;
   try {
     const res = await fetch('https://api.fabric.microsoft.com/v1/admin/items?type=DataAgent', {

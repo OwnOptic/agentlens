@@ -25,7 +25,6 @@ import { mockConversationKpis, mockEnvironments } from '@/lib/mock/seed';
 function hasCredentials(): boolean {
   return Boolean(
     process.env.AZURE_CLIENT_ID &&
-      process.env.AZURE_CLIENT_SECRET &&
       process.env.AZURE_TENANT_ID,
   );
 }
@@ -55,6 +54,7 @@ async function liveGetAggregatesForEnv(
   orgUrl: string,
 ): Promise<ConversationKpi[]> {
   const token = await getDataverseToken(orgUrl);
+  if (!token) throw new Error(`No token available for Dataverse org: ${orgUrl}`);
 
   // Look back 30 days
   const lookback = new Date();

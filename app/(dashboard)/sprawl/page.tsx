@@ -20,6 +20,8 @@ import {
   PageHeader,
   SectionTitle,
   Button,
+  InfoTip,
+  DataSourceBadge,
 } from '@/components/ui';
 
 interface EnvironmentSprawlCard {
@@ -142,6 +144,7 @@ export default function SprawlPage() {
         title="Environment Sprawl"
         subtitle="Monitor multi-environment agent distribution and migration progress"
         tone="sky"
+        badge={<DataSourceBadge state="demo" source="sample data" />}
         actions={
           <Button icon={RefreshCw} variant="ghost">Refresh</Button>
         }
@@ -149,34 +152,62 @@ export default function SprawlPage() {
 
       {/* Overall KPIs */}
       <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Server}
-          label="Total Environments"
-          value={totalEnvs}
-          sublabel={`${prodEnvCount} Production`}
-          tone="sky"
-        />
-        <StatCard
-          icon={Boxes}
-          label="Total Agents"
-          value={totalAgents}
-          sublabel="across all environments"
-          tone="emerald"
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Default Env Agents"
-          value={defaultEnvData?.agentCount || 0}
-          sublabel={`${defaultEnvData?.activeAgents || 0} active`}
-          tone="amber"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label="Migration Progress"
-          value={`${overallMigrationProgress.pctMoved}%`}
-          sublabel={`${overallMigrationProgress.moved} agents moved`}
-          tone={overallMigrationProgress.pctMoved === 100 ? 'emerald' : overallMigrationProgress.pctMoved > 50 ? 'sky' : 'amber'}
-        />
+        <div className="relative">
+          <StatCard
+            icon={Server}
+            label="Total Environments"
+            value={totalEnvs}
+            sublabel={`${prodEnvCount} Production`}
+            tone="sky"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Total Environments">
+              All Copilot Studio environments in the tenant. Sample data until connected.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={Boxes}
+            label="Total Agents"
+            value={totalAgents}
+            sublabel="across all environments"
+            tone="emerald"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Total Agents">
+              Aggregate count across all environments. Sample data until live.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={AlertTriangle}
+            label="Default Env Agents"
+            value={defaultEnvData?.agentCount || 0}
+            sublabel={`${defaultEnvData?.activeAgents || 0} active`}
+            tone="amber"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Default Environment">
+              Agents in the default environment. Often a sprawl risk. Sample data.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={TrendingUp}
+            label="Migration Progress"
+            value={`${overallMigrationProgress.pctMoved}%`}
+            sublabel={`${overallMigrationProgress.moved} agents moved`}
+            tone={overallMigrationProgress.pctMoved === 100 ? 'emerald' : overallMigrationProgress.pctMoved > 50 ? 'sky' : 'amber'}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Migration Progress">
+              Track of agents migrated to dedicated environments. Stateful demo.
+            </InfoTip>
+          </div>
+        </div>
       </div>
 
       {/* Overall Migration Progress Bar */}

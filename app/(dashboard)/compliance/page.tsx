@@ -27,6 +27,8 @@ import {
   PageHeader,
   SectionTitle,
   Button,
+  InfoTip,
+  DataSourceBadge,
 } from '@/components/ui';
 import {
   ShieldCheck,
@@ -408,9 +410,12 @@ export default function CompliancePage() {
         subtitle="Rule evaluation, violation queue, and weighted compliance scores."
         tone={tenantBand === 'warning' || tenantBand === 'critical' ? 'amber' : 'emerald'}
         badge={
-          <Badge variant={tenantBand === 'excellent' || tenantBand === 'good' ? 'success' : tenantBand === 'warning' ? 'warning' : 'critical'}>
-            {tenantBand}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant={tenantBand === 'excellent' || tenantBand === 'good' ? 'success' : tenantBand === 'warning' ? 'warning' : 'critical'}>
+              {tenantBand}
+            </Badge>
+            <DataSourceBadge state="demo" source="sample data" />
+          </div>
         }
         actions={
           <>
@@ -422,34 +427,62 @@ export default function CompliancePage() {
 
       {/* Score cards row */}
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          icon={ShieldCheck}
-          label="Tenant Score"
-          value={tenantScore.score}
-          sublabel={`${tenantScore.compliantAgentPct}% agents compliant`}
-          tone={tenantBand === 'excellent' || tenantBand === 'good' ? 'emerald' : tenantBand === 'warning' ? 'amber' : 'red'}
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Open Violations"
-          value={openCount}
-          sublabel={`${criticalOpen} critical`}
-          tone={openCount === 0 ? 'emerald' : criticalOpen > 0 ? 'red' : 'amber'}
-        />
-        <StatCard
-          icon={ListChecks}
-          label="Rules Active"
-          value={allRules.filter((r) => r.enabled).length}
-          sublabel={`of ${allRules.length} total`}
-          tone="sky"
-        />
-        <StatCard
-          icon={Users}
-          label="Agents Assessed"
-          value={mockAgents.length}
-          sublabel={`across ${mockEnvironments.length} envs`}
-          tone="violet"
-        />
+        <div className="relative">
+          <StatCard
+            icon={ShieldCheck}
+            label="Tenant Score"
+            value={tenantScore.score}
+            sublabel={`${tenantScore.compliantAgentPct}% agents compliant`}
+            tone={tenantBand === 'excellent' || tenantBand === 'good' ? 'emerald' : tenantBand === 'warning' ? 'amber' : 'red'}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Tenant Score">
+              Weighted compliance score across all agents. Sample data until live tenant connected.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={AlertTriangle}
+            label="Open Violations"
+            value={openCount}
+            sublabel={`${criticalOpen} critical`}
+            tone={openCount === 0 ? 'emerald' : criticalOpen > 0 ? 'red' : 'amber'}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Open Violations">
+              Unacknowledged compliance violations. Sample demo data.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={ListChecks}
+            label="Rules Active"
+            value={allRules.filter((r) => r.enabled).length}
+            sublabel={`of ${allRules.length} total`}
+            tone="sky"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Rules Active">
+              Enabled compliance rules in the pack. Sample rules.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={Users}
+            label="Agents Assessed"
+            value={mockAgents.length}
+            sublabel={`across ${mockEnvironments.length} envs`}
+            tone="violet"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Agents Assessed">
+              Count of agents evaluated. Sample data.
+            </InfoTip>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-6">

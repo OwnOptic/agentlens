@@ -1,158 +1,140 @@
 /**
  * Token Service (Server-Only)
  *
- * Provides MSAL-based token acquisition for Power Platform APIs.
- * This module must only run on the server side.
+ * Provides MSAL-based token acquisition via ConfidentialClientApplication
+ * (client-credentials flow). Falls back to dev-only env tokens when the
+ * service principal is not configured.
+ *
+ * Per-audience in-memory cache with expiry + 401-retry-once at call sites.
  *
  * @server
  */
 
-import { ConfidentialClientApplication, ITokenCache } from '@azure/msal-node';
+import { ConfidentialClientApplication, Configuration } from '@azure/msal-node';
+import { getSecret } from '@/lib/config/secrets';
 
-/**
- * In-memory token cache entry
- */
+// ---------------------------------------------------------------------------
+// Cache
+// ---------------------------------------------------------------------------
+
 interface CachedToken {
   token: string;
   expiresAt: number;
 }
 
-/**
- * TokenService
- * Manages token lifecycle with per-audience caching.
- */
-class TokenService {
-  private clientApp: ConfidentialClientApplication;
-  private tokenCache: Map<string, CachedToken>;
-  private readonly BUFFER_MS = 5 * 60 * 1000; // 5 minute buffer before expiry
+const _cache = new Map<string, CachedToken>();
+const BUFFER_MS = 5 * 60 * 1000; // retire 5 min before actual expiry
 
-  constructor() {
-    // TODO: Initialize ConfidentialClientApplication with real MSAL config
-    // Expected config structure:
-    // {
-    //   auth: {
-    //     clientId: string;
-    //     authority: string;
-    //     clientSecret: string;
-    //   }
-    // }
-    this.clientApp = {} as ConfidentialClientApplication;
-    this.tokenCache = new Map<string, CachedToken>();
-  }
+// ---------------------------------------------------------------------------
+// MSAL app (lazy, singleton)
+// ---------------------------------------------------------------------------
 
-  /**
-   * Get a token for the specified audience.
-   * Caches tokens in memory and returns cached tokens if valid.
-   *
-   * @param audience The resource audience (e.g., "https://org.crm.dynamics.com/.default")
-   * @returns A valid access token
-   * @throws Error if token acquisition fails
-   */
-  public async getToken(audience: string): Promise<string> {
-    // Check cache
-    const cached = this.tokenCache.get(audience);
-    if (cached && cached.expiresAt > Date.now() + this.BUFFER_MS) {
-      return cached.token;
-    }
+let _msalApp: ConfidentialClientApplication | null = null;
 
-    // TODO: Acquire token via clientApp.acquireTokenByClientCredential()
-    // Expected call:
-    // const response = await this.clientApp.acquireTokenByClientCredential({
-    //   scopes: [audience],
-    // });
-    // const token = response?.accessToken;
-    const token = '';
+async function getMsalApp(): Promise<ConfidentialClientApplication | null> {
+  if (_msalApp) return _msalApp;
 
-    if (!token) {
-      throw new Error(`Failed to acquire token for audience: ${audience}`);
-    }
+  const clientId = process.env.AZURE_CLIENT_ID;
+  const tenantId = process.env.AZURE_TENANT_ID;
+  if (!clientId || !tenantId) return null;
 
-    // TODO: Decode JWT to extract expiration
-    // For now, assume 1 hour expiry (3600 seconds)
-    const expiresAt = Date.now() + 3600 * 1000;
+  const clientSecret = await getSecret('AZURE-CLIENT-SECRET');
+  if (!clientSecret) return null;
 
-    // Cache the token
-    this.tokenCache.set(audience, { token, expiresAt });
+  const config: Configuration = {
+    auth: {
+      clientId,
+      authority: `https://login.microsoftonline.com/${tenantId}`,
+      clientSecret,
+    },
+  };
 
-    return token;
-  }
-
-  /**
-   * Get a token for Dataverse (Power Platform data access).
-   * Derives the audience from the organization URL.
-   *
-   * @param orgUrl The Dataverse organization URL (e.g., "https://myorg.crm.dynamics.com")
-   * @returns A valid access token
-   * @throws Error if token acquisition fails
-   */
-  public async getDataverseToken(orgUrl: string): Promise<string> {
-    // Normalize orgUrl (remove trailing slash if present)
-    const normalizedUrl = orgUrl.endsWith('/') ? orgUrl.slice(0, -1) : orgUrl;
-
-    // Derive the audience for Dataverse
-    const audience = `${normalizedUrl}/.default`;
-
-    return this.getToken(audience);
-  }
-
-  /**
-   * Clear the token cache.
-   * Useful for logout or testing.
-   */
-  public clearCache(): void {
-    this.tokenCache.clear();
-  }
-
-  /**
-   * Get cache statistics (for monitoring).
-   * @returns Map of cached audiences and their expiry times
-   */
-  public getCacheStats(): Map<string, number> {
-    const stats = new Map<string, number>();
-    for (const [audience, cached] of this.tokenCache.entries()) {
-      stats.set(audience, cached.expiresAt);
-    }
-    return stats;
-  }
+  _msalApp = new ConfidentialClientApplication(config);
+  return _msalApp;
 }
 
-// Singleton instance
-let instance: TokenService | null = null;
+// ---------------------------------------------------------------------------
+// Core acquire (SP flow)
+// ---------------------------------------------------------------------------
 
-/**
- * Get the token service singleton instance.
- */
-export function getTokenService(): TokenService {
-  if (!instance) {
-    instance = new TokenService();
-  }
-  return instance;
+async function acquireViaSp(audience: string): Promise<string | null> {
+  const app = await getMsalApp();
+  if (!app) return null;
+
+  const response = await app.acquireTokenByClientCredential({ scopes: [audience] });
+  return response?.accessToken ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Public helpers
+// ---------------------------------------------------------------------------
 
 /**
  * Get a token for the specified audience.
- *
- * @param audience The resource audience
- * @returns A valid access token
+ * Tries SP client-credentials first; falls back to the named dev env var.
+ * Returns null (never throws) so callers can emit honest "not_connected" state.
  */
-export async function getToken(audience: string): Promise<string> {
-  return getTokenService().getToken(audience);
+export async function getToken(
+  audience: string,
+  devFallbackEnv?: string,
+): Promise<string | null> {
+  const cached = _cache.get(audience);
+  if (cached && cached.expiresAt > Date.now() + BUFFER_MS) {
+    return cached.token;
+  }
+
+  // SP flow
+  try {
+    const spToken = await acquireViaSp(audience);
+    if (spToken) {
+      // MSAL returns expiresOn; default 60 min if absent
+      _cache.set(audience, { token: spToken, expiresAt: Date.now() + 60 * 60 * 1000 });
+      return spToken;
+    }
+  } catch {
+    // SP flow failed - try dev fallback below
+  }
+
+  // Dev-only fallback
+  if (devFallbackEnv) {
+    const devToken = process.env[devFallbackEnv];
+    if (devToken) return devToken;
+  }
+
+  return null;
 }
 
 /**
- * Get a token for Dataverse (Power Platform data access).
- *
- * @param orgUrl The Dataverse organization URL
- * @returns A valid access token
+ * Convenience: ARM token for Azure Resource Graph / management plane.
+ * SP if AZURE_CLIENT_ID is configured, else MVP_ARM_TOKEN (dev-only).
  */
-export async function getDataverseToken(orgUrl: string): Promise<string> {
-  return getTokenService().getDataverseToken(orgUrl);
+export async function getArmToken(): Promise<string | null> {
+  return getToken('https://management.azure.com/.default', 'MVP_ARM_TOKEN');
 }
 
 /**
- * Clear the token cache.
- * Useful for logout or testing.
+ * Convenience: Microsoft Graph token.
+ * SP if AZURE_CLIENT_ID is configured, else MVP_GRAPH_TOKEN (dev-only).
+ */
+export async function getGraphToken(): Promise<string | null> {
+  return getToken('https://graph.microsoft.com/.default', 'MVP_GRAPH_TOKEN');
+}
+
+/**
+ * Dataverse token for a specific org URL.
+ * Derives audience as `{orgUrl}/.default` and always uses the SP flow
+ * (no dev token for Dataverse - requires real creds).
+ */
+export async function getDataverseToken(orgUrl: string): Promise<string | null> {
+  const normalized = orgUrl.endsWith('/') ? orgUrl.slice(0, -1) : orgUrl;
+  const audience = `${normalized}/.default`;
+  return getToken(audience);
+}
+
+/**
+ * Clear the in-memory token cache.
  */
 export function clearTokenCache(): void {
-  getTokenService().clearCache();
+  _cache.clear();
+  _msalApp = null;
 }

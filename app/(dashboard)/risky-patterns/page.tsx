@@ -25,6 +25,8 @@ import {
   PageHeader,
   SectionTitle,
   Button,
+  InfoTip,
+  DataSourceBadge,
 } from '@/components/ui';
 import {
   AlertTriangle,
@@ -169,11 +171,14 @@ export default function RiskyPatternsPage() {
         subtitle="Matrix of agents versus detected governance risk patterns. Sorted by risk score."
         tone="amber"
         badge={
-          highRiskCount > 0 ? (
-            <Badge variant="critical" dot>{highRiskCount} high risk</Badge>
-          ) : (
-            <Badge variant="success">All clear</Badge>
-          )
+          <div className="flex items-center gap-2">
+            {highRiskCount > 0 ? (
+              <Badge variant="critical" dot>{highRiskCount} high risk</Badge>
+            ) : (
+              <Badge variant="success">All clear</Badge>
+            )}
+            <DataSourceBadge state="demo" source="sample data" />
+          </div>
         }
         actions={
           <>
@@ -185,34 +190,62 @@ export default function RiskyPatternsPage() {
 
       {/* KPI stat cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          icon={AlertTriangle}
-          label="High Risk Agents"
-          value={highRiskCount}
-          sublabel="risk score >= 15"
-          tone={highRiskCount > 0 ? 'red' : 'emerald'}
-        />
-        <StatCard
-          icon={Activity}
-          label="Medium Risk Agents"
-          value={mediumRiskCount}
-          sublabel="risk score 8-14"
-          tone={mediumRiskCount > 0 ? 'amber' : 'emerald'}
-        />
-        <StatCard
-          icon={Workflow}
-          label="Patterns Detected"
-          value={patternsDetectedCount}
-          sublabel={`of ${ALL_RISKY_PATTERNS.length} total patterns`}
-          tone="sky"
-        />
-        <StatCard
-          icon={Boxes}
-          label="Agents Scanned"
-          value={allRows.length}
-          sublabel={`${filtered.length} match current filters`}
-          tone="violet"
-        />
+        <div className="relative">
+          <StatCard
+            icon={AlertTriangle}
+            label="High Risk Agents"
+            value={highRiskCount}
+            sublabel="risk score >= 15"
+            tone={highRiskCount > 0 ? 'red' : 'emerald'}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="High Risk Agents">
+              Agents scoring 15+ on risk assessment. Sample data until live.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={Activity}
+            label="Medium Risk Agents"
+            value={mediumRiskCount}
+            sublabel="risk score 8-14"
+            tone={mediumRiskCount > 0 ? 'amber' : 'emerald'}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Medium Risk Agents">
+              Agents with moderate governance risk patterns. Sample data.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={Workflow}
+            label="Patterns Detected"
+            value={patternsDetectedCount}
+            sublabel={`of ${ALL_RISKY_PATTERNS.length} total patterns`}
+            tone="sky"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Patterns Detected">
+              Number of distinct risk patterns found. Sample data.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={Boxes}
+            label="Agents Scanned"
+            value={allRows.length}
+            sublabel={`${filtered.length} match current filters`}
+            tone="violet"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Agents Scanned">
+              Total agents evaluated for risk patterns. Sample data.
+            </InfoTip>
+          </div>
+        </div>
       </div>
 
       {/* Summary stats bar */}

@@ -8,6 +8,9 @@
 
 import { NextResponse } from 'next/server';
 import { azureChat, getAzureConfig } from '@/lib/ai/azureOpenAI';
+import { getArmToken, clearTokenCache } from '@/lib/auth/tokenService';
+// auth-sso: guard + rate-limiter applied here; other route slices call requireSession in their own files
+import { requireSession, rateLimit, safeError } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +30,7 @@ async function arg(token: string, query: string): Promise<unknown[]> {
 
 /** Build a grounding context from REAL tenant data (ARG). */
 async function buildLiveContext(): Promise<{ context: string; live: boolean }> {
-  const token = process.env.MVP_ARM_TOKEN;
+  const token = await getArmToken();
   if (!token) return { context: 'No live tenant connection configured.', live: false };
   try {
     const [summary, environments, agents] = await Promise.all([
@@ -62,7 +65,9 @@ async function buildLiveContext(): Promise<{ context: string; live: boolean }> {
     );
     return { context, live: true };
   } catch (e) {
-    return { context: `Live query failed: ${e instanceof Error ? e.message : String(e)}`, live: false };
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('401')) clearTokenCache();
+    return { context: `Live query failed: ${msg}`, live: false };
   }
 }
 
@@ -72,6 +77,20 @@ Be concise, specific, and cite numbers from the data. If the data does not conta
 and suggest what to check. Never invent agents, environments, or numbers that are not in the data.`;
 
 export async function POST(request: Request): Promise<NextResponse> {
+  // Auth guard - returns 401 when auth is enabled and no valid session token
+  const guard = await requireSession(request);
+  if (!guard.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Per-user rate limit: 30 requests per minute
+  const rateLimitKey = guard.user.email ?? guard.user.name ?? 'anonymous';
+  const rl = rateLimit(rateLimitKey, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded', retryAfterMs: rl.retryAfterMs },
+      { status: 429 },
+    );
+  }
+
   if (!getAzureConfig()) {
     return NextResponse.json(
       {
@@ -103,7 +122,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ answer, grounded: live, dataSource: live ? 'live-arg' : 'none' });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e), hint: 'Check the Azure OpenAI deployment + key.' },
+      { error: safeError(e), hint: 'Check the Azure OpenAI deployment + key.' },
       { status: 502 },
     );
   }

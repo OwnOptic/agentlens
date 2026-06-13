@@ -39,6 +39,8 @@ import {
   PageHeader,
   SectionTitle,
   Button,
+  InfoTip,
+  DataSourceBadge,
 } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
@@ -237,7 +239,12 @@ export default function MaturityPage() {
         tone="emerald"
         title="Maturity Assessment"
         subtitle="Governance maturity scored across Security, Management, and Reporting pillars. Auto-derived scores are capped at 3/4 by design - see the honesty note below."
-        badge={<ScoreBadge score={assessment.overallScore} band={assessment.overallBand} />}
+        badge={
+          <div className="flex items-center gap-2">
+            <ScoreBadge score={assessment.overallScore} band={assessment.overallBand} />
+            <DataSourceBadge state="demo" source="sample data" />
+          </div>
+        }
         actions={
           <div className="flex items-center gap-2">
             <p className="text-xs text-slate-500">
@@ -268,26 +275,32 @@ export default function MaturityPage() {
       {/* Pillar StatCards summary */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {assessment.pillars.map((p) => (
-          <StatCard
-            key={p.pillar}
-            icon={
-              p.pillar === 'security'
-                ? ShieldCheck
-                : p.pillar === 'management'
-                ? Settings2
-                : BarChart3
-            }
-            label={p.label}
-            value={`${p.averageScore.toFixed(1)} / 4`}
-            tone={
-              p.band === 'optimised' || p.band === 'managed'
-                ? 'emerald'
-                : p.band === 'developing'
-                ? 'amber'
-                : 'red'
-            }
-            sublabel={BAND_TEXT[p.band]}
-          />
+          <div key={p.pillar} className="relative">
+            <StatCard
+              icon={
+                p.pillar === 'security'
+                  ? ShieldCheck
+                  : p.pillar === 'management'
+                  ? Settings2
+                  : BarChart3
+              }
+              label={p.label}
+              value={`${p.averageScore.toFixed(1)} / 4`}
+              tone={
+                p.band === 'optimised' || p.band === 'managed'
+                  ? 'emerald'
+                  : p.band === 'developing'
+                  ? 'amber'
+                  : 'red'
+              }
+              sublabel={BAND_TEXT[p.band]}
+            />
+            <div className="absolute top-4 right-4">
+              <InfoTip label={`${p.label} Pillar`}>
+                Maturity score for the {p.label.toLowerCase()} pillar. Sample data until live assessment connected.
+              </InfoTip>
+            </div>
+          </div>
         ))}
       </div>
 

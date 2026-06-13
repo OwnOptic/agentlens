@@ -121,6 +121,7 @@ async function liveScan(
   botId: string,
 ): Promise<Record<string, unknown>> {
   const token = await getDataverseToken(orgUrl);
+  if (!token) throw new Error(`No token available for Dataverse org: ${orgUrl}`);
 
   // Run all four Dataverse queries in parallel
   const [botResult, channelsResult, flowsResult, kbResult] =

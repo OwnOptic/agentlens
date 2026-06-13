@@ -22,6 +22,8 @@ import {
   PageHeader,
   SectionTitle,
   Button,
+  InfoTip,
+  DataSourceBadge,
 } from '@/components/ui';
 
 type SortField = 'name' | 'env' | 'owner' | 'state' | 'lifecycle' | 'created' | 'activity';
@@ -175,6 +177,7 @@ export default function InventoryPage() {
         title="Agent Inventory"
         subtitle="Filter and explore agents across your Copilot Studio environments"
         tone="emerald"
+        badge={<DataSourceBadge state="demo" source="sample data" />}
         actions={
           <>
             <Button icon={RefreshCw} variant="ghost">Refresh</Button>
@@ -185,35 +188,63 @@ export default function InventoryPage() {
 
       {/* KPI Cards */}
       <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Boxes}
-          label="Total Agents"
-          value={filtered.length}
-          sublabel={`in ${envName}`}
-          tone="emerald"
-        />
-        <StatCard
-          icon={Gauge}
-          label="Credit Usage"
-          value={`${capacity.pct.toFixed(1)}%`}
-          sublabel={`${capacity.creditUsed.toLocaleString()} / ${capacity.creditLimit.toLocaleString()}`}
-          tone={capacity.pct > 90 ? 'red' : capacity.pct > 75 ? 'amber' : 'sky'}
-        />
-        <StatCard
-          icon={DollarSign}
-          label="Daily Cost"
-          value={`$${totalCost.toFixed(2)}`}
-          sublabel={`Projected: $${avgProjectedMonthly.toFixed(2)}/mo`}
-          tone="violet"
-        />
-        <StatCard
-          icon={Activity}
-          label="Active Agents"
-          value={stateCounts.active}
-          sublabel={`${stateCounts.inactive} inactive`}
-          delta="flat"
-          tone="emerald"
-        />
+        <div className="relative">
+          <StatCard
+            icon={Boxes}
+            label="Total Agents"
+            value={filtered.length}
+            sublabel={`in ${envName}`}
+            tone="emerald"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Total Agents">
+              Count of all agents in the selected environment. This is sample data until connected to a live tenant.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={Gauge}
+            label="Credit Usage"
+            value={`${capacity.pct.toFixed(1)}%`}
+            sublabel={`${capacity.creditUsed.toLocaleString()} / ${capacity.creditLimit.toLocaleString()}`}
+            tone={capacity.pct > 90 ? 'red' : capacity.pct > 75 ? 'amber' : 'sky'}
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Credit Usage">
+              Percentage of API credits used in the environment. Sample data until wired to live metrics.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={DollarSign}
+            label="Daily Cost"
+            value={`$${totalCost.toFixed(2)}`}
+            sublabel={`Projected: $${avgProjectedMonthly.toFixed(2)}/mo`}
+            tone="violet"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Daily Cost">
+              Estimated daily cost based on agent activity. Projection is for demonstration.
+            </InfoTip>
+          </div>
+        </div>
+        <div className="relative">
+          <StatCard
+            icon={Activity}
+            label="Active Agents"
+            value={stateCounts.active}
+            sublabel={`${stateCounts.inactive} inactive`}
+            delta="flat"
+            tone="emerald"
+          />
+          <div className="absolute top-4 right-4">
+            <InfoTip label="Active Agents">
+              Agents with state 'Active'. Sample data until live connection.
+            </InfoTip>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}

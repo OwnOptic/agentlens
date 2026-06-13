@@ -1,0 +1,38 @@
+# azure.yaml - Azure Developer CLI (azd) configuration
+# Run: azd up  (provision + deploy in one command)
+# Docs: https://learn.microsoft.com/azure/developer/azure-developer-cli/
+
+name: agentlens
+
+metadata:
+  template: agentlens@0.1.0
+
+# Infrastructure template
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+# Services
+services:
+  app:
+    project: .
+    language: js
+    host: appservice
+    # Next.js standalone output is in .next/standalone
+    # The build command produces it; azd packages and deploys it.
+    build:
+      commands:
+        - npm run build
+    dist: .next/standalone
+    # App Service deployment settings
+    hooks:
+      postdeploy:
+        # Copy static assets into the standalone output (required for standalone mode)
+        shell: sh
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
+
+pipeline:
+  provider: github

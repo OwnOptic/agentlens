@@ -5,7 +5,13 @@
  */
 
 import { getDataverseToken } from '@/lib/auth/tokenService';
-import { parseTranscriptContent, analyzeConversationSmart, aggregateAgentSignals, type AgentKpiSignals, type ConversationSignals } from '@/lib/analysis/intent';
+import {
+  parseTranscriptContent,
+  analyzeConversationSmart,
+  aggregateAgentSignals,
+  type AgentKpiSignals,
+  type ConversationSignals,
+} from '@/lib/analysis/intent';
 
 export interface ConversationIntelResult {
   fetchedAt: string;
@@ -24,6 +30,8 @@ interface TranscriptRow {
 /** Query the conversationtranscript table in one environment. */
 async function fetchTranscriptsForEnv(orgUrl: string, sinceDays = 30, max = 500): Promise<TranscriptRow[]> {
   const token = await getDataverseToken(orgUrl);
+  if (!token) throw new Error(`No token available for Dataverse org: ${orgUrl}`);
+
   const since = new Date();
   since.setDate(since.getDate() - sinceDays);
   const filter = encodeURIComponent(`createdon gt ${since.toISOString()}`);
@@ -55,9 +63,16 @@ async function fetchTranscriptsForEnv(orgUrl: string, sinceDays = 30, max = 500)
  */
 export async function getConversationIntel(orgUrls: string[]): Promise<ConversationIntelResult> {
   const fetchedAt = new Date().toISOString();
-  const hasCreds = Boolean(process.env.AZURE_CLIENT_ID && process.env.AZURE_CLIENT_SECRET && process.env.AZURE_TENANT_ID);
+  const hasCreds = Boolean(process.env.AZURE_CLIENT_ID && process.env.AZURE_TENANT_ID);
   if (!hasCreds || orgUrls.length === 0) {
-    return { fetchedAt, source: 'none', envCount: 0, transcriptCount: 0, agents: [], note: 'No Dataverse connection - add the service-principal env vars and an environment with transcripts.' };
+    return {
+      fetchedAt,
+      source: 'none',
+      envCount: 0,
+      transcriptCount: 0,
+      agents: [],
+      note: 'No Dataverse connection - add the service-principal env vars and an environment with transcripts.',
+    };
   }
 
   // 1) fetch transcripts from every env (failures per-env are non-fatal)
@@ -66,7 +81,14 @@ export async function getConversationIntel(orgUrls: string[]): Promise<Conversat
   for (const r of perEnv) if (r.status === 'fulfilled') rows.push(...r.value);
 
   if (rows.length === 0) {
-    return { fetchedAt, source: 'dataverse', envCount: orgUrls.length, transcriptCount: 0, agents: [], note: 'No conversation transcripts found in the connected environments.' };
+    return {
+      fetchedAt,
+      source: 'dataverse',
+      envCount: orgUrls.length,
+      transcriptCount: 0,
+      agents: [],
+      note: 'No conversation transcripts found in the connected environments.',
+    };
   }
 
   // 2) group by agent, parse + analyze each conversation
