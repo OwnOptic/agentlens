@@ -18,6 +18,7 @@ import type {
   HealthMetric,
   LifecycleStage,
 } from '@/lib/types';
+import { assertNotProduction } from '@/lib/mock/seed';
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -81,6 +82,8 @@ export interface ExecPosture {
   maturityScore: number;
   /** Timestamp the snapshot was computed */
   generatedAt: string;
+  /** True when the posture was computed from mock seed data */
+  isMock: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -410,6 +413,7 @@ export function computeExecPosture(input: ExecPostureInput): ExecPosture {
     capacityRows,
     maturityScore,
     generatedAt: new Date().toISOString(),
+    isMock: false,
   };
 }
 
@@ -417,6 +421,8 @@ export function computeExecPosture(input: ExecPostureInput): ExecPosture {
 // Convenience: build ExecPosture directly from mock seed (offline fallback)
 // ---------------------------------------------------------------------------
 export function computeExecPostureFromMock(): ExecPosture {
+  assertNotProduction();
+
   const {
     mockAgents,
     mockEnvironments,
@@ -429,7 +435,7 @@ export function computeExecPostureFromMock(): ExecPosture {
     mockHealthMetrics,
   } = require('@/lib/mock/seed');
 
-  return computeExecPosture({
+  const posture = computeExecPosture({
     agents: mockAgents,
     environments: mockEnvironments,
     metrics: mockMetrics,
@@ -440,4 +446,6 @@ export function computeExecPostureFromMock(): ExecPosture {
     conversationKpis: mockConversationKpis,
     healthMetrics: mockHealthMetrics,
   });
+
+  return { ...posture, isMock: true };
 }

@@ -7,9 +7,12 @@
  * The prod column includes a prod-entry checklist for each agent.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Agent, LifecycleStage } from '@/lib/types';
 import { mockAgents, mockEnvironments, mockGatePolicies, mockGateDecisions } from '@/lib/mock/seed';
+import { Layers } from 'lucide-react';
+import { PageHeader, DataSourceBadge } from '@/components/ui';
+import { EmptyState } from '@/components/EmptyState';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -40,11 +43,13 @@ const STAGE_HEADER_COLORS: Record<LifecycleStage, string> = {
 // ---------------------------------------------------------------------------
 // Prod-entry checklist items
 // Each item has a label + a function that evaluates whether the agent passes.
+// `now` is passed in from the parent component (stable useMemo) to avoid
+// SSR/client hydration mismatches from calling Date.now() during render.
 // ---------------------------------------------------------------------------
 interface ChecklistItem {
   id: string;
   label: string;
-  check: (agent: Agent) => boolean;
+  check: (agent: Agent, now: number) => boolean;
 }
 
 const PROD_CHECKLIST: ChecklistItem[] = [
@@ -77,9 +82,9 @@ const PROD_CHECKLIST: ChecklistItem[] = [
   {
     id: 'recent_activity',
     label: 'Activity in last 30 days',
-    check: (a) => {
+    check: (a, now) => {
       if (!a.lastActivity) return false;
-      const days = (Date.now() - new Date(a.lastActivity).getTime()) / 86_400_000;
+      const days = (now - new Date(a.lastActivity).getTime()) / 86_400_000;
       return days <= 30;
     },
   },
@@ -88,11 +93,11 @@ const PROD_CHECKLIST: ChecklistItem[] = [
 // ---------------------------------------------------------------------------
 // ProdChecklist component
 // ---------------------------------------------------------------------------
-function ProdChecklist({ agent }: { agent: Agent }) {
+function ProdChecklist({ agent, now }: { agent: Agent; now: number }) {
   const [open, setOpen] = useState(false);
   const results = PROD_CHECKLIST.map((item) => ({
     ...item,
-    pass: item.check(agent),
+    pass: item.check(agent, now),
   }));
   const passCount = results.filter((r) => r.pass).length;
   const allPass = passCount === results.length;
@@ -161,7 +166,7 @@ function ProdChecklist({ agent }: { agent: Agent }) {
 // ---------------------------------------------------------------------------
 // AgentCard
 // ---------------------------------------------------------------------------
-function AgentCard({ agent }: { agent: Agent }) {
+function AgentCard({ agent, now }: { agent: Agent; now: number }) {
   return (
     <div className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
       <div className="font-medium text-sm text-slate-200">{agent.name}</div>
@@ -183,7 +188,7 @@ function AgentCard({ agent }: { agent: Agent }) {
       </div>
 
       {/* Prod checklist only on agents in prod stage */}
-      {agent.lifecycle === 'prod' && <ProdChecklist agent={agent} />}
+      {agent.lifecycle === 'prod' && <ProdChecklist agent={agent} now={now} />}
     </div>
   );
 }
@@ -191,7 +196,7 @@ function AgentCard({ agent }: { agent: Agent }) {
 // ---------------------------------------------------------------------------
 // StageColumn
 // ---------------------------------------------------------------------------
-function StageColumn({ stage }: { stage: LifecycleStage }) {
+function StageColumn({ stage, now }: { stage: LifecycleStage; now: number }) {
   const agents = mockAgents.filter((a) => a.lifecycle === stage);
 
   return (
@@ -212,10 +217,10 @@ function StageColumn({ stage }: { stage: LifecycleStage }) {
       {/* Cards */}
       <div className="flex flex-col gap-3">
         {agents.length === 0 ? (
-          <p className="text-xs text-slate-600 italic">No agents at this stage.</p>
+          <EmptyState title="No agents" message={`No agents at the ${STAGE_LABELS[stage]} stage.`} />
         ) : (
           agents.map((agent) => (
-            <AgentCard key={`${agent.envId}/${agent.botId}`} agent={agent} />
+            <AgentCard key={`${agent.envId}/${agent.botId}`} agent={agent} now={now} />
           ))
         )}
       </div>
@@ -227,16 +232,19 @@ function StageColumn({ stage }: { stage: LifecycleStage }) {
 // Page
 // ---------------------------------------------------------------------------
 export default function LifecyclePage() {
+  // Stable `now` - computed once on mount to avoid SSR/client hydration mismatch
+  const now = useMemo(() => Date.now(), []);
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Lifecycle</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Agents grouped by operational lifecycle stage. Production agents include
-          the prod-entry checklist derived from the release gate policy.
-        </p>
-      </div>
+      <PageHeader
+        icon={Layers}
+        title="Lifecycle"
+        subtitle="Agents grouped by operational lifecycle stage. Production agents include the prod-entry checklist derived from the release gate policy."
+        badge={<DataSourceBadge state="demo" source="sample data" />}
+        tone="emerald"
+      />
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs text-slate-500">
@@ -253,7 +261,7 @@ export default function LifecyclePage() {
       {/* Columns */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {STAGES.map((stage) => (
-          <StageColumn key={stage} stage={stage} />
+          <StageColumn key={stage} stage={stage} now={now} />
         ))}
       </div>
 

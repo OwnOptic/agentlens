@@ -1,4 +1,4 @@
-import React from 'lucide-react';
+import React from 'react';
 import { Button } from '@/components/ui';
 import type { LucideIcon } from 'lucide-react';
 

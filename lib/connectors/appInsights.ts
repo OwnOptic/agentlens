@@ -8,6 +8,10 @@
  * KQL query targets the customEvents table populated by Copilot Studio's
  * native App Insights integration (enabled per-environment in PPAC).
  *
+ * T-205: AbortSignal.timeout on the KQL fetch; KQL capped with `| take 10000`
+ *        so the API never streams unbounded rows; truncated flag surfaced when
+ *        the row count equals the cap.
+ *
  * Required env vars:
  *   APPINSIGHTS_WORKSPACE_ID  - Log Analytics workspace ID (GUID)
  *
@@ -17,16 +21,17 @@
 import type { AppInsightsConnector } from '@/lib/connectors/interfaces';
 import type { HealthMetric } from '@/lib/types';
 import { getToken } from '@/lib/auth/tokenService';
+import { hasCoreCredentials } from '@/lib/connectors/config';
 import { mockHealthMetrics } from '@/lib/mock/seed';
 
 const LOG_ANALYTICS_SCOPE = 'https://api.loganalytics.io/.default';
+const FETCH_TIMEOUT_MS = 30_000; // KQL queries can be slow
+const KQL_ROW_CAP = 10_000;
 
 function hasCredentials(): boolean {
   return Boolean(
-    process.env.AZURE_CLIENT_ID &&
-      process.env.AZURE_CLIENT_SECRET &&
-      process.env.AZURE_TENANT_ID &&
-      process.env.APPINSIGHTS_WORKSPACE_ID,
+    hasCoreCredentials() &&
+    process.env.APPINSIGHTS_WORKSPACE_ID,
   );
 }
 
@@ -48,11 +53,15 @@ interface LogAnalyticsResponse {
   tables: QueryTable[];
 }
 
+// Result extended with a truncated flag
+export interface HealthResult {
+  metrics: HealthMetric[];
+  truncated: boolean;
+}
+
 // ---------------------------------------------------------------------------
-// KQL query
+// KQL query - capped at KQL_ROW_CAP to avoid unbounded result sets (T-205)
 // ---------------------------------------------------------------------------
-// Copilot Studio pushes bot telemetry under customEvents and traces.
-// This query aggregates error rate, latency, and failed-session count per bot per day.
 const HEALTH_KQL = `
 customEvents
 | where timestamp > ago(30d)
@@ -75,16 +84,17 @@ customEvents
     avgLatencyMs  = round(avgLatency, 0),
     failedSessions
 | order by date desc
+| take ${KQL_ROW_CAP}
 `.trim();
 
 // ---------------------------------------------------------------------------
 // Live implementation
 // ---------------------------------------------------------------------------
-async function liveGetHealth(): Promise<HealthMetric[]> {
+async function liveGetHealth(): Promise<HealthResult> {
   const workspaceId = process.env.APPINSIGHTS_WORKSPACE_ID ?? '';
   const token = await getToken(LOG_ANALYTICS_SCOPE);
+  if (!token) throw new Error('No token for Log Analytics API');
 
-  // POST https://api.loganalytics.io/v1/workspaces/{workspaceId}/query
   const url = `https://api.loganalytics.io/v1/workspaces/${workspaceId}/query`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -94,40 +104,59 @@ async function liveGetHealth(): Promise<HealthMetric[]> {
       Accept: 'application/json',
     },
     body: JSON.stringify({ query: HEALTH_KQL }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!resp.ok) {
-    throw new Error(
-      `Log Analytics query failed: ${resp.status} ${resp.statusText}`,
-    );
+    throw new Error(`Log Analytics query failed: ${resp.status} ${resp.statusText}`);
   }
 
   const body = (await resp.json()) as LogAnalyticsResponse;
   const table = body.tables[0];
-  if (!table) return [];
+  if (!table) return { metrics: [], truncated: false };
 
-  // Map column names to indices for safe extraction
   const colIndex = Object.fromEntries(
     table.columns.map((c, i) => [c.name, i]),
   );
 
-  return table.rows.map((row): HealthMetric => ({
-    envId:         String(row[colIndex['envId']] ?? ''),
-    botId:         String(row[colIndex['botId']] ?? ''),
-    date:          String(row[colIndex['date']] ?? ''),
-    errorRate:     Number(row[colIndex['errorRate']] ?? 0),
-    avgLatencyMs:  Number(row[colIndex['avgLatencyMs']] ?? 0),
+  const metrics: HealthMetric[] = table.rows.map((row): HealthMetric => ({
+    envId:          String(row[colIndex['envId']] ?? ''),
+    botId:          String(row[colIndex['botId']] ?? ''),
+    date:           String(row[colIndex['date']] ?? ''),
+    errorRate:      Number(row[colIndex['errorRate']] ?? 0),
+    avgLatencyMs:   Number(row[colIndex['avgLatencyMs']] ?? 0),
     failedSessions: Number(row[colIndex['failedSessions']] ?? 0),
   }));
+
+  // If we got exactly KQL_ROW_CAP rows the result was likely truncated
+  const truncated = table.rows.length >= KQL_ROW_CAP;
+
+  return { metrics, truncated };
 }
 
 // ---------------------------------------------------------------------------
 // Exported connector object
+// AppInsightsConnector interface expects getHealth(): Promise<HealthMetric[]>
+// We preserve that signature while internally tracking truncation.
 // ---------------------------------------------------------------------------
-export const appInsights: AppInsightsConnector = {
+export const appInsights: AppInsightsConnector & {
+  getHealthWithMeta(): Promise<HealthResult>;
+} = {
   async getHealth(): Promise<HealthMetric[]> {
     if (!hasCredentials()) {
       return mockHealthMetrics;
+    }
+    const { metrics } = await liveGetHealth();
+    return metrics;
+  },
+
+  /**
+   * Extended variant that also returns the truncated flag.
+   * Use this in API routes that need to surface the truncation state to the UI.
+   */
+  async getHealthWithMeta(): Promise<HealthResult> {
+    if (!hasCredentials()) {
+      return { metrics: mockHealthMetrics, truncated: false };
     }
     return liveGetHealth();
   },

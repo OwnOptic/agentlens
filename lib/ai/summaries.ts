@@ -4,10 +4,10 @@
  * Produces structured governance summaries from AgentLens metrics.
  *
  * LLM integration note:
- *   In production this calls Claude (Anthropic) to synthesize the numeric
+ *   In production this calls Azure OpenAI to synthesize the numeric
  *   signals into a human-readable narrative. Tenant data (environment names,
- *   agent names, cost figures) is sensitive - route through Claude only,
- *   never through Ollama or any third-party model.
+ *   agent names, cost figures) is sensitive - route through the configured
+ *   Azure OpenAI endpoint only, never through Ollama or any third-party model.
  *
  *   Stub: the `generateSummary` function derives a deterministic text summary
  *   from the input signals so the UI renders correctly offline.
@@ -22,6 +22,7 @@ import type {
   HealthMetric,
   ConversationKpi,
 } from '@/lib/types';
+import { getAzureConfig, azureChat } from '@/lib/ai/azureOpenAI';
 
 // ---------------------------------------------------------------------------
 // Input / output types
@@ -78,18 +79,7 @@ function avg(nums: number[]): number {
 }
 
 // ---------------------------------------------------------------------------
-// Stub summary generator
-//
-// In production replace this function body with an Anthropic Claude API call:
-//
-//   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-//   const message = await anthropic.messages.create({
-//     model: 'claude-opus-4-5',
-//     max_tokens: 1024,
-//     system: GOVERNANCE_SUMMARY_SYSTEM_PROMPT,
-//     messages: [{ role: 'user', content: JSON.stringify(signals) }],
-//   });
-//   return parseStructuredSummary(message.content);
+// Stub summary generator (offline / no-LLM path)
 // ---------------------------------------------------------------------------
 function buildStubSummary(input: GovernanceSummaryInput): GovernanceSummary {
   const {
@@ -150,6 +140,8 @@ function buildStubSummary(input: GovernanceSummaryInput): GovernanceSummary {
       `no critical blockers outstanding.`;
 
   // Build sections
+  // NOTE: alert messages are not included here - only counts/severities to avoid
+  // accidentally surfacing raw DB strings in stub output.
   const sections: GovernanceSummarySection[] = [
     {
       title: 'Agent Inventory',
@@ -166,10 +158,7 @@ function buildStubSummary(input: GovernanceSummaryInput): GovernanceSummary {
       body:
         criticalAlerts.length === 0 && warnAlerts.length === 0
           ? 'No open alerts. Governance signals are within normal thresholds.'
-          : `${criticalAlerts.length} critical and ${warnAlerts.length} warning alert(s) currently open. ` +
-            (criticalAlerts.length > 0
-              ? `Critical: ${criticalAlerts.map((a) => a.message).join('; ')}`
-              : ''),
+          : `${criticalAlerts.length} critical and ${warnAlerts.length} warning alert(s) currently open.`,
       rag: rag(criticalAlerts.length, 1, 2),
     },
     {
@@ -237,17 +226,136 @@ function buildStubSummary(input: GovernanceSummaryInput): GovernanceSummary {
 }
 
 // ---------------------------------------------------------------------------
+// Numeric signals sent to the LLM (no raw message strings or tenant names)
+// ---------------------------------------------------------------------------
+
+interface NumericSignals {
+  totalAgents: number;
+  prodAgents: number;
+  pocAgents: number;
+  orphanAgents: number;
+  criticalAlerts: number;
+  warningAlerts: number;
+  overageEnvCount: number;
+  nearLimitEnvCount: number;
+  openCritViolations: number;
+  openWarnViolations: number;
+  avgMaturityScore: number;
+  cappedControls: number;
+  avgErrorRatePct: number;
+  avgLatencyMs: number;
+  avgDeflectionRatePct: number;
+  avgEscalationRatePct: number;
+}
+
+function buildNumericSignals(input: GovernanceSummaryInput): NumericSignals {
+  const { agents, alerts, capacity, violations, maturityResults, healthMetrics, conversationKpis } =
+    input;
+
+  const criticalAlerts = alerts.filter((a) => a.severity === 'critical' && a.state === 'open');
+  const warnAlerts = alerts.filter((a) => a.severity === 'warning' && a.state === 'open');
+  const overageEnvs = capacity.filter((c) => c.overage);
+  const nearLimitEnvs = capacity.filter((c) => !c.overage && c.pct >= 80);
+  const openCritViol = violations.filter((v) => v.state === 'open' && v.severity === 'critical');
+  const openWarnViol = violations.filter((v) => v.state === 'open' && v.severity === 'warning');
+  const maturityAvg = maturityResults.length > 0 ? avg(maturityResults.map((r) => r.score)) : 0;
+
+  return {
+    totalAgents: agents.length,
+    prodAgents: agents.filter((a) => a.lifecycle === 'prod').length,
+    pocAgents: agents.filter((a) => a.lifecycle === 'poc').length,
+    orphanAgents: agents.filter((a) => a.state === 'Active' && !a.ownerEmail).length,
+    criticalAlerts: criticalAlerts.length,
+    warningAlerts: warnAlerts.length,
+    overageEnvCount: overageEnvs.length,
+    nearLimitEnvCount: nearLimitEnvs.length,
+    openCritViolations: openCritViol.length,
+    openWarnViolations: openWarnViol.length,
+    avgMaturityScore: Math.round(maturityAvg * 10) / 10,
+    cappedControls: maturityResults.filter((r) => r.capped).length,
+    avgErrorRatePct: Math.round(avg(healthMetrics.map((h) => h.errorRate)) * 1000) / 10,
+    avgLatencyMs: Math.round(avg(healthMetrics.map((h) => h.avgLatencyMs))),
+    avgDeflectionRatePct:
+      Math.round(avg(conversationKpis.map((k) => k.deflectionRate)) * 1000) / 10,
+    avgEscalationRatePct:
+      Math.round(avg(conversationKpis.map((k) => k.escalationRate)) * 1000) / 10,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// One-time production warning flag (module-level, resets per cold start)
+// ---------------------------------------------------------------------------
+let _prodStubWarnedSummaries = false;
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
  * Generate a structured AI governance summary from the provided signals.
  *
- * Runs the offline stub by default.
- * In production: set ANTHROPIC_API_KEY and replace the stub body with a
- * Claude API call (see comment inside buildStubSummary).
+ * When AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY + AZURE_OPENAI_DEPLOYMENT
+ * are configured, calls Azure OpenAI and returns isMock:false.
+ * Otherwise falls back to the deterministic stub (isMock:true).
+ *
+ * IMPORTANT: only numeric/aggregate counts are sent to the LLM - raw alert
+ * message strings and agent names are never included in the prompt.
  */
 export async function generateSummary(input: GovernanceSummaryInput): Promise<GovernanceSummary> {
-  // TODO: when ANTHROPIC_API_KEY is set, call Claude here instead of the stub.
-  return buildStubSummary(input);
+  const cfg = getAzureConfig();
+
+  if (!cfg) {
+    // No live provider configured - use stub
+    if (process.env.NODE_ENV === 'production' && !_prodStubWarnedSummaries) {
+      _prodStubWarnedSummaries = true;
+      console.warn(
+        '[summaries] Running in production without Azure OpenAI configured - falling back to stub summary. ' +
+          'Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY and AZURE_OPENAI_DEPLOYMENT to enable live summaries.',
+      );
+    }
+    return buildStubSummary(input);
+  }
+
+  // Live path: send numeric signals only (no raw message strings / tenant names)
+  const signals = buildNumericSignals(input);
+
+  const systemPrompt = `You are an AI governance analyst for a Power Platform agent fleet.
+You will receive numeric signals about the tenant's governance posture and must return a JSON object
+with exactly this shape:
+{
+  "headline": "<one sentence summary>",
+  "sections": [
+    { "title": "<section title>", "body": "<2-4 sentence analysis>", "rag": "green"|"amber"|"red" }
+  ]
+}
+Sections must cover: Agent Inventory, Alerts, Credit Capacity, Compliance, Maturity, Operational Health, Conversation KPIs.
+Base rag colours strictly on the numeric values. Do not invent data not present in the signals.
+Respond with valid JSON only - no markdown fences.`;
+
+  try {
+    const raw = await azureChat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: JSON.stringify(signals) },
+      ],
+      { temperature: 0.2, maxTokens: 1200 },
+    );
+
+    const parsed = JSON.parse(raw) as {
+      headline: string;
+      sections: GovernanceSummarySection[];
+    };
+
+    return {
+      headline: parsed.headline,
+      sections: parsed.sections,
+      generatedAt: new Date().toISOString(),
+      isMock: false,
+    };
+  } catch (err) {
+    // LLM call failed - log and fall back to stub rather than crashing
+    console.error('[summaries] Azure OpenAI call failed, falling back to stub:', err);
+    const stub = buildStubSummary(input);
+    return stub; // isMock: true from buildStubSummary
+  }
 }

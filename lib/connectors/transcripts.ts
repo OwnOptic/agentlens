@@ -2,9 +2,15 @@
  * conversationtranscript connector - pulls real Copilot Studio transcripts from Dataverse,
  * then runs intent/sentiment analysis. PII-SAFE: transcript content is processed in-memory
  * and discarded; only aggregated per-agent signal counts leave this module.
+ *
+ * T-203: use `_msdyn_bot_value` (the msdyn_bot lookup) instead of
+ *        `_bot_conversationtranscriptid_value` (the transcript's own id) so
+ *        transcripts are grouped by the agent that produced them.
+ * T-201: use fetchODataAll for pagination + timeout.
  */
 
 import { getDataverseToken } from '@/lib/auth/tokenService';
+import { fetchODataAll } from '@/lib/connectors/odata';
 import {
   parseTranscriptContent,
   analyzeConversationSmart,
@@ -18,6 +24,7 @@ export interface ConversationIntelResult {
   source: 'dataverse' | 'none';
   envCount: number;
   transcriptCount: number;
+  truncated: boolean;
   agents: AgentKpiSignals[];
   note?: string;
 }
@@ -27,33 +34,43 @@ interface TranscriptRow {
   botId: string;
 }
 
+// OData response row from Dataverse conversationtranscripts
+interface DataverseTranscriptRow {
+  content: string;
+  // msdyn_bot lookup - the agent that owns this transcript
+  _msdyn_bot_value?: string | null;
+}
+
 /** Query the conversationtranscript table in one environment. */
-async function fetchTranscriptsForEnv(orgUrl: string, sinceDays = 30, max = 500): Promise<TranscriptRow[]> {
+async function fetchTranscriptsForEnv(
+  orgUrl: string,
+  sinceDays = 30,
+  max = 500,
+): Promise<{ rows: TranscriptRow[]; truncated: boolean }> {
   const token = await getDataverseToken(orgUrl);
   if (!token) throw new Error(`No token available for Dataverse org: ${orgUrl}`);
 
   const since = new Date();
   since.setDate(since.getDate() - sinceDays);
   const filter = encodeURIComponent(`createdon gt ${since.toISOString()}`);
-  // conversationtranscript: content (JSON), bot lookup, createdon
+
+  // T-203: select _msdyn_bot_value (the bot lookup) not _bot_conversationtranscriptid_value
   const url =
     `${orgUrl.replace(/\/$/, '')}/api/data/v9.2/conversationtranscripts` +
-    `?$select=content,createdon,_bot_conversationtranscriptid_value&$filter=${filter}&$top=${max}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'OData-MaxVersion': '4.0',
-      'OData-Version': '4.0',
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
+    `?$select=content,createdon,_msdyn_bot_value&$filter=${filter}&$top=${max}`;
+
+  const { rows: raw, truncated } = await fetchODataAll<DataverseTranscriptRow>(url, token, {
+    timeoutMs: 20_000,
+    maxRows: max,
   });
-  if (!res.ok) throw new Error(`conversationtranscripts ${res.status}`);
-  const body = (await res.json()) as { value: Array<Record<string, unknown>> };
-  return body.value.map((r) => ({
+
+  const rows: TranscriptRow[] = raw.map((r) => ({
     content: String(r.content ?? ''),
-    botId: String(r._bot_conversationtranscriptid_value ?? 'unknown'),
+    // T-203: use the bot lookup value; fall back to 'unknown' only as a last resort
+    botId: String(r._msdyn_bot_value ?? 'unknown'),
   }));
+
+  return { rows, truncated };
 }
 
 /**
@@ -70,6 +87,7 @@ export async function getConversationIntel(orgUrls: string[]): Promise<Conversat
       source: 'none',
       envCount: 0,
       transcriptCount: 0,
+      truncated: false,
       agents: [],
       note: 'No Dataverse connection - add the service-principal env vars and an environment with transcripts.',
     };
@@ -78,7 +96,13 @@ export async function getConversationIntel(orgUrls: string[]): Promise<Conversat
   // 1) fetch transcripts from every env (failures per-env are non-fatal)
   const perEnv = await Promise.allSettled(orgUrls.map((u) => fetchTranscriptsForEnv(u)));
   const rows: TranscriptRow[] = [];
-  for (const r of perEnv) if (r.status === 'fulfilled') rows.push(...r.value);
+  let anyTruncated = false;
+  for (const r of perEnv) {
+    if (r.status === 'fulfilled') {
+      rows.push(...r.value.rows);
+      if (r.value.truncated) anyTruncated = true;
+    }
+  }
 
   if (rows.length === 0) {
     return {
@@ -86,6 +110,7 @@ export async function getConversationIntel(orgUrls: string[]): Promise<Conversat
       source: 'dataverse',
       envCount: orgUrls.length,
       transcriptCount: 0,
+      truncated: false,
       agents: [],
       note: 'No conversation transcripts found in the connected environments.',
     };
@@ -109,5 +134,12 @@ export async function getConversationIntel(orgUrls: string[]): Promise<Conversat
   }
   agents.sort((a, b) => b.conversations - a.conversations);
 
-  return { fetchedAt, source: 'dataverse', envCount: orgUrls.length, transcriptCount: rows.length, agents };
+  return {
+    fetchedAt,
+    source: 'dataverse',
+    envCount: orgUrls.length,
+    transcriptCount: rows.length,
+    truncated: anyTruncated,
+    agents,
+  };
 }

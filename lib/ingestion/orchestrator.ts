@@ -6,15 +6,16 @@
  *
  * Pipeline:
  *   1. argInventory.listEnvironments()  - discover all accessible envs
- *   2. Per-env (p-limit 5):
- *      a. argInventory.listAgents()     - bots in that env (Dataverse)
+ *   2. argInventory.listAgents()        - ONE tenant-wide call (hoisted)
+ *   3. Per-env (p-limit 5):
+ *      a. filter agents slice by envId
  *      b. graph.resolveOwners()         - enrich owner name/email
  *      c. cost.getDailyMetrics()        - daily credit consumption
- *   3. kpis.getAggregates()            - conversation KPIs (all envs at once)
- *   4. appInsights.getHealth()         - health metrics (all envs at once)
- *   5. cost.getCapacity()              - env capacity/overage
- *   6. Upsert everything to Supabase   - environments, agents, metrics, kpis, health, capacity
- *   7. Persist IngestionRun record
+ *   4. kpis.getAggregates()            - conversation KPIs (all envs at once)
+ *   5. appInsights.getHealth()         - health metrics (all envs at once)
+ *   6. cost.getCapacity()              - env capacity/overage
+ *   7. Upsert everything to Supabase   - environments, agents, metrics, kpis, health, capacity
+ *   8. Persist IngestionRun record
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -35,32 +36,18 @@ import { cost } from '@/lib/connectors/cost';
 import { graph } from '@/lib/connectors/graph';
 import { appInsights } from '@/lib/connectors/appInsights';
 import { kpis } from '@/lib/connectors/kpis';
-
-// Supabase is optional - only used when SUPABASE_URL + SUPABASE_SERVICE_KEY are set
-let supabase: Awaited<ReturnType<typeof import('@/lib/db/supabaseClient').getSupabaseClient>> | null =
-  null;
-
-async function getDb() {
-  if (supabase) return supabase;
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-    return null;
-  }
-  const { getSupabaseClient } = await import('@/lib/db/supabaseClient');
-  supabase = getSupabaseClient();
-  return supabase;
-}
+import { getSupabaseClient } from '@/lib/db/supabaseClient';
 
 // ---------------------------------------------------------------------------
-// Supabase upsert helpers
+// Supabase helpers - call getSupabaseClient() directly so resetSupabaseClient()
+// from lib/db/supabaseClient works correctly (no module-level singleton here).
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // A typed helper that lets us call Supabase for tables not in the generated
 // schema (v2 tables added by migration 0002) without TS complaints.
 // ---------------------------------------------------------------------------
-type AnySupabaseClient = ReturnType<
-  typeof import('@/lib/db/supabaseClient').getSupabaseClient
->;
+type AnySupabaseClient = ReturnType<typeof getSupabaseClient>;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function fromAny(db: AnySupabaseClient, table: string): any {
@@ -68,8 +55,15 @@ function fromAny(db: AnySupabaseClient, table: string): any {
   return (db as any).from(table);
 }
 
+function getDb(): AnySupabaseClient | null {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+    return null;
+  }
+  return getSupabaseClient();
+}
+
 async function upsertEnvironments(envs: Environment[]): Promise<void> {
-  const db = await getDb();
+  const db = getDb();
   if (!db || envs.length === 0) return;
   const rows = envs.map((e) => ({
     id: e.id,
@@ -84,7 +78,7 @@ async function upsertEnvironments(envs: Environment[]): Promise<void> {
 }
 
 async function upsertAgents(agents: Agent[]): Promise<void> {
-  const db = await getDb();
+  const db = getDb();
   if (!db || agents.length === 0) return;
   const rows = agents.map((a) => ({
     env_id: a.envId,
@@ -105,7 +99,7 @@ async function upsertAgents(agents: Agent[]): Promise<void> {
 }
 
 async function upsertMetrics(metrics: AgentMetricDaily[]): Promise<void> {
-  const db = await getDb();
+  const db = getDb();
   if (!db || metrics.length === 0) return;
   const rows = metrics.map((m) => ({
     env_id: m.envId,
@@ -129,7 +123,7 @@ async function upsertMetrics(metrics: AgentMetricDaily[]): Promise<void> {
 }
 
 async function upsertConversationKpis(rows: ConversationKpi[]): Promise<void> {
-  const db = await getDb();
+  const db = getDb();
   if (!db || rows.length === 0) return;
   const mapped = rows.map((r) => ({
     env_id: r.envId,
@@ -146,7 +140,7 @@ async function upsertConversationKpis(rows: ConversationKpi[]): Promise<void> {
 }
 
 async function upsertHealthMetrics(rows: HealthMetric[]): Promise<void> {
-  const db = await getDb();
+  const db = getDb();
   if (!db || rows.length === 0) return;
   const mapped = rows.map((r) => ({
     env_id: r.envId,
@@ -163,7 +157,7 @@ async function upsertHealthMetrics(rows: HealthMetric[]): Promise<void> {
 }
 
 async function upsertCapacity(rows: Capacity[]): Promise<void> {
-  const db = await getDb();
+  const db = getDb();
   if (!db || rows.length === 0) return;
   const mapped = rows.map((r) => ({
     env_id: r.envId,
@@ -179,7 +173,7 @@ async function upsertCapacity(rows: Capacity[]): Promise<void> {
 }
 
 async function upsertIngestionRun(run: IngestionRun): Promise<void> {
-  const db = await getDb();
+  const db = getDb();
   if (!db) return;
   const row = {
     id: run.id,
@@ -201,24 +195,19 @@ interface EnvResult {
   agents: Agent[];
   metrics: AgentMetricDaily[];
   errors: string[];
+  persisted: boolean;
 }
 
-async function ingestEnvironment(env: Environment): Promise<EnvResult> {
+async function ingestEnvironment(
+  env: Environment,
+  allAgents: Agent[],
+): Promise<EnvResult> {
   const errors: string[] = [];
-  let agents: Agent[] = [];
   let metrics: AgentMetricDaily[] = [];
+  let persisted = false;
 
-  // 1. List agents in this environment
-  try {
-    // argInventory.listAgents() fans out across all envs; for per-env we filter
-    // by env.id from the full list - this avoids N extra round-trips
-    const all = await argInventory.listAgents();
-    agents = all.filter((a) => a.envId === env.id);
-  } catch (e) {
-    errors.push(
-      `${env.id}: agents: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
+  // 1. Filter pre-fetched agents for this environment (no extra ARG call)
+  let agents = allAgents.filter((a) => a.envId === env.id);
 
   // 2. Resolve owner identities via Graph
   if (agents.length > 0) {
@@ -259,7 +248,20 @@ async function ingestEnvironment(env: Environment): Promise<EnvResult> {
     }
   }
 
-  return { agents, metrics, errors };
+  // 4. Upsert agents + metrics; track whether anything actually persisted
+  try {
+    await upsertAgents(agents);
+    await upsertMetrics(metrics);
+    if (agents.length > 0 || metrics.length > 0) {
+      persisted = true;
+    }
+  } catch (e) {
+    errors.push(
+      `${env.id}: upsert: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  return { agents, metrics, errors, persisted };
 }
 
 // ---------------------------------------------------------------------------
@@ -286,6 +288,9 @@ export async function runIngestion(): Promise<IngestionRun> {
     errors: [],
   };
 
+  // Track whether any upsert actually succeeded across the whole run
+  let anyPersisted = false;
+
   try {
     // --- Step 1: Discover environments ---
     let environments: Environment[] = [];
@@ -301,52 +306,48 @@ export async function runIngestion(): Promise<IngestionRun> {
       // --- Step 2: Upsert environments ---
       try {
         await upsertEnvironments(environments);
+        anyPersisted = true;
       } catch (e) {
         run.errors.push(
           `upsertEnvironments: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
 
-      // --- Step 3: Fan-out per-environment ingestion (max 5 parallel) ---
+      // --- Step 3: Single tenant-wide ARG agents fetch (hoisted) ---
+      let allAgents: Agent[] = [];
+      try {
+        allAgents = await argInventory.listAgents();
+      } catch (e) {
+        run.errors.push(
+          `listAgents: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+
+      // --- Step 4: Fan-out per-environment ingestion (max 5 parallel) ---
       const limit = pLimit(5);
       const envResults = await Promise.all(
-        environments.map((env) => limit(() => ingestEnvironment(env))),
+        environments.map((env) => limit(() => ingestEnvironment(env, allAgents))),
       );
 
-      const allAgents: Agent[] = [];
-      const allMetrics: AgentMetricDaily[] = [];
+      const collectedAgents: Agent[] = [];
+      const collectedMetrics: AgentMetricDaily[] = [];
 
       for (const result of envResults) {
-        allAgents.push(...result.agents);
-        allMetrics.push(...result.metrics);
+        collectedAgents.push(...result.agents);
+        collectedMetrics.push(...result.metrics);
         run.errors.push(...result.errors);
-      }
-
-      // --- Step 4: Persist agents and metrics ---
-      try {
-        await upsertAgents(allAgents);
-      } catch (e) {
-        run.errors.push(
-          `upsertAgents: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-
-      try {
-        await upsertMetrics(allMetrics);
-      } catch (e) {
-        run.errors.push(
-          `upsertMetrics: ${e instanceof Error ? e.message : String(e)}`,
-        );
+        if (result.persisted) anyPersisted = true;
       }
 
       run.envCount = environments.length;
-      run.agentCount = allAgents.length;
+      run.agentCount = collectedAgents.length;
     }
 
     // --- Step 5: Conversation KPIs (all envs in one call) ---
     try {
       const kpiRows = await kpis.getAggregates();
       await upsertConversationKpis(kpiRows);
+      if (kpiRows.length > 0) anyPersisted = true;
     } catch (e) {
       run.errors.push(
         `kpis: ${e instanceof Error ? e.message : String(e)}`,
@@ -357,6 +358,7 @@ export async function runIngestion(): Promise<IngestionRun> {
     try {
       const healthRows = await appInsights.getHealth();
       await upsertHealthMetrics(healthRows);
+      if (healthRows.length > 0) anyPersisted = true;
     } catch (e) {
       run.errors.push(
         `appInsights: ${e instanceof Error ? e.message : String(e)}`,
@@ -367,6 +369,7 @@ export async function runIngestion(): Promise<IngestionRun> {
     try {
       const capacityRows = await cost.getCapacity();
       await upsertCapacity(capacityRows);
+      if (capacityRows.length > 0) anyPersisted = true;
     } catch (e) {
       run.errors.push(
         `capacity: ${e instanceof Error ? e.message : String(e)}`,
@@ -374,9 +377,11 @@ export async function runIngestion(): Promise<IngestionRun> {
     }
 
     // --- Determine final status ---
+    // 'partial' only when at least one upsert succeeded but there were errors.
+    // 'failed' when nothing persisted at all.
     if (run.errors.length === 0) {
       run.status = 'success';
-    } else if (run.envCount > 0 || run.agentCount > 0) {
+    } else if (anyPersisted) {
       run.status = 'partial';
     } else {
       run.status = 'failed';
@@ -390,11 +395,14 @@ export async function runIngestion(): Promise<IngestionRun> {
 
   run.finishedAt = new Date().toISOString();
 
-  // Persist the run record itself
+  // Persist the run record itself - non-throwing, log on failure
   try {
     await upsertIngestionRun(run);
-  } catch {
-    // Best-effort - do not override the run status over a record-keeping failure
+  } catch (e) {
+    console.error(
+      '[runIngestion] Failed to persist ingestion run record:',
+      e instanceof Error ? e.message : String(e),
+    );
   }
 
   return run;

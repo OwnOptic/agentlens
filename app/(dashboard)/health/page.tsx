@@ -2,6 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import type { HealthMetric } from '@/lib/types';
+import { Activity } from 'lucide-react';
+import { PageHeader, DataSourceBadge } from '@/components/ui';
+import { SkeletonTable } from '@/components/Skeleton';
 
 
 interface AgentHealthSummary {
@@ -134,8 +137,14 @@ function HealthPage() {
   if (loading) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-white mb-4">Health</h1>
-        <p className="text-slate-400">Loading...</p>
+        <PageHeader
+          icon={Activity}
+          title="Agent Health"
+          subtitle="Operational health per agent. Connect Azure App Insights to see live data."
+          badge={<DataSourceBadge state="demo" source="sample data" />}
+          tone="emerald"
+        />
+        <SkeletonTable rowCount={6} />
       </div>
     );
   }
@@ -143,7 +152,13 @@ function HealthPage() {
   if (error) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-white mb-4">Health</h1>
+        <PageHeader
+          icon={Activity}
+          title="Agent Health"
+          subtitle="Operational health per agent. Connect Azure App Insights to see live data."
+          badge={<DataSourceBadge state="demo" source="sample data" />}
+          tone="emerald"
+        />
         <p className="text-red-400">Error: {error}</p>
       </div>
     );
@@ -168,14 +183,13 @@ function HealthPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Agent Health</h1>
-        <p className="text-slate-400">
-          Operational health metrics per agent: error rate, latency, failed sessions.
-          <br />
-          Data sourced from Application Insights aggregation queries.
-        </p>
-      </div>
+      <PageHeader
+        icon={Activity}
+        title="Agent Health"
+        subtitle="Operational health per agent. Connect Azure App Insights to see live data."
+        badge={<DataSourceBadge state="demo" source="sample data" />}
+        tone="emerald"
+      />
 
       {/* Health Status Summary */}
       <div className="grid grid-cols-4 gap-4 mb-8">

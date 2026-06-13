@@ -3,8 +3,9 @@
  *
  * Endpoint: GET https://api.bap.microsoft.com/providers/PowerPlatform.Governance/v1/policies?api-version=2016-11-01
  *
- * Auth: ARM token from MSAL (client_credentials flow using AZURE_CLIENT_ID +
- * AZURE_TENANT_ID + AZURE_CLIENT_SECRET / Key Vault equivalent).
+ * T-501: replaced private MSAL flow with getArmToken() from tokenService so
+ *        the token cache, retry logic, and MSAL singleton are shared across
+ *        all connectors.
  *
  * Returns an honest "not_connected" state when credentials are absent or the
  * token call fails - never throws, never fakes data.
@@ -12,7 +13,7 @@
  * @server
  */
 
-import { getSecret } from '@/lib/config/secrets';
+import { getArmToken } from '@/lib/auth/tokenService';
 import type { TenantDlpPolicy, DlpGap } from '@/lib/dlp/types';
 
 // ---------------------------------------------------------------------------
@@ -41,41 +42,6 @@ interface BapPolicy {
 
 interface BapPoliciesResponse {
   value?: BapPolicy[];
-}
-
-// ---------------------------------------------------------------------------
-// Token acquisition (ARM scope)
-// ---------------------------------------------------------------------------
-
-async function getArmToken(): Promise<string | null> {
-  const clientId = process.env.AZURE_CLIENT_ID;
-  const tenantId = process.env.AZURE_TENANT_ID;
-
-  if (!clientId || !tenantId) return null;
-
-  const clientSecret = await getSecret('AZURE-CLIENT-SECRET');
-  if (!clientSecret) return null;
-
-  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-  const body = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: clientId,
-    client_secret: clientSecret,
-    scope: 'https://management.azure.com/.default',
-  });
-
-  try {
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { access_token?: string };
-    return data.access_token ?? null;
-  } catch {
-    return null;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +95,6 @@ function mapBapPolicy(raw: BapPolicy): TenantDlpPolicy {
 function detectGaps(policies: TenantDlpPolicy[]): DlpGap[] {
   const gaps: DlpGap[] = [];
 
-  // Critical: no policy covers AllEnvironments (default env unprotected)
   const hasGlobalPolicy = policies.some((p) => p.scope === 'AllEnvironments');
   if (!hasGlobalPolicy) {
     gaps.push({
@@ -140,7 +105,6 @@ function detectGaps(policies: TenantDlpPolicy[]): DlpGap[] {
     });
   }
 
-  // Warning: zero policies exist at all
   if (policies.length === 0) {
     gaps.push({
       severity: 'warning',
@@ -151,7 +115,6 @@ function detectGaps(policies: TenantDlpPolicy[]): DlpGap[] {
     return gaps;
   }
 
-  // Info: fewer than 2 policies (only one global policy, no env-specific policies)
   if (policies.length === 1 && hasGlobalPolicy) {
     gaps.push({
       severity: 'info',
@@ -161,7 +124,6 @@ function detectGaps(policies: TenantDlpPolicy[]): DlpGap[] {
     });
   }
 
-  // Warning: any policy has zero blocked connectors (likely misconfigured)
   for (const p of policies) {
     if (p.blockedCount === 0 && p.businessCount === 0 && p.nonBusinessCount === 0) {
       gaps.push({
@@ -188,7 +150,6 @@ export type DlpResult =
  *
  * Returns honest "not_connected" when:
  *  - AZURE_CLIENT_ID or AZURE_TENANT_ID env vars are absent
- *  - AZURE-CLIENT-SECRET secret is missing
  *  - ARM token acquisition fails (wrong credentials, consent not granted)
  *  - BAP API returns 403 (service principal lacks Power Platform admin role)
  *
@@ -206,6 +167,7 @@ export async function fetchTenantDlpPolicies(): Promise<DlpResult> {
     };
   }
 
+  // T-501: use shared tokenService instead of a private MSAL flow
   const token = await getArmToken();
   if (!token) {
     return {
@@ -225,7 +187,6 @@ export async function fetchTenantDlpPolicies(): Promise<DlpResult> {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      // 10-second timeout to avoid hanging API routes
       signal: AbortSignal.timeout(10_000),
     });
 

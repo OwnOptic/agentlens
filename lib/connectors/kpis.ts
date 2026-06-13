@@ -6,6 +6,9 @@
  *
  * NOTE: aggregate only - no message content, no user identifiers are retrieved.
  *
+ * T-201: uses fetchODataAll for pagination + timeout.
+ * T-501: hasCredentials() now includes AZURE_CLIENT_SECRET via hasCoreCredentials().
+ *
  * Dataverse query per environment:
  *   GET {orgUrl}/api/data/v9.2/msdyn_conversationkpis
  *     ?$apply=groupby((msdyn_botid,msdyn_date),
@@ -20,13 +23,13 @@
 import type { KpisConnector } from '@/lib/connectors/interfaces';
 import type { ConversationKpi } from '@/lib/types';
 import { getDataverseToken } from '@/lib/auth/tokenService';
+import { fetchODataAll } from '@/lib/connectors/odata';
+import { hasCoreCredentials } from '@/lib/connectors/config';
 import { mockConversationKpis, mockEnvironments } from '@/lib/mock/seed';
 
+// T-501: fix - the original omitted AZURE_CLIENT_SECRET from the check
 function hasCredentials(): boolean {
-  return Boolean(
-    process.env.AZURE_CLIENT_ID &&
-      process.env.AZURE_TENANT_ID,
-  );
+  return hasCoreCredentials();
 }
 
 // ---------------------------------------------------------------------------
@@ -38,12 +41,7 @@ interface KpiAggregateRow {
   sessions: number;
   deflected: number;
   escalated: number;
-  // Env is injected by the caller since it is not in the Dataverse record
   _envId?: string;
-}
-
-interface ODataApplyResponse {
-  value: KpiAggregateRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -61,8 +59,6 @@ async function liveGetAggregatesForEnv(
   lookback.setDate(lookback.getDate() - 30);
   const filterDate = lookback.toISOString().split('T')[0];
 
-  // Dataverse $apply aggregation query
-  // GET {orgUrl}/api/data/v9.2/msdyn_conversationkpis?$apply=...&$filter=...
   const applyParam = encodeURIComponent(
     `groupby((msdyn_botid,msdyn_date),` +
       `aggregate(msdyn_sessioncount with sum as sessions,` +
@@ -74,31 +70,20 @@ async function liveGetAggregatesForEnv(
     `${orgUrl.replace(/\/$/, '')}/api/data/v9.2/msdyn_conversationkpis` +
     `?$apply=${applyParam}&$filter=${filterParam}`;
 
-  const resp = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'OData-MaxVersion': '4.0',
-      'OData-Version': '4.0',
-      Accept: 'application/json',
-    },
+  const { rows } = await fetchODataAll<KpiAggregateRow>(url, token, {
+    timeoutMs: 20_000,
+    // KPI aggregates are small - keep a generous cap
+    maxRows: 5_000,
   });
 
-  if (!resp.ok) {
-    throw new Error(
-      `Dataverse msdyn_conversationkpis failed (${envId}): ${resp.status} ${resp.statusText}`,
-    );
-  }
-
-  const body = (await resp.json()) as ODataApplyResponse;
-
-  return body.value.map((row): ConversationKpi => {
+  return rows.map((row): ConversationKpi => {
     const sessions = row.sessions ?? 0;
     const deflected = row.deflected ?? 0;
     const escalated = row.escalated ?? 0;
     return {
       envId,
       botId: row.msdyn_botid,
-      date: row.msdyn_date.split('T')[0], // normalize to YYYY-MM-DD
+      date: row.msdyn_date.split('T')[0],
       sessions,
       deflectionRate:
         sessions > 0 ? parseFloat((deflected / sessions).toFixed(4)) : 0,
@@ -117,10 +102,6 @@ export const kpis: KpisConnector = {
       return mockConversationKpis;
     }
 
-    // Fan out across all environments listed in the mock registry as a seed
-    // In live mode we use the same environment list returned by the argInventory connector.
-    // To avoid a circular dependency we re-use the mock env list as the set of org URLs
-    // unless AGENTLENS_ORG_URLS is explicitly configured.
     const orgUrlsEnv = process.env.AGENTLENS_ORG_URLS;
     const envPairs: Array<{ envId: string; orgUrl: string }> = orgUrlsEnv
       ? orgUrlsEnv.split(',').map((s, i) => ({

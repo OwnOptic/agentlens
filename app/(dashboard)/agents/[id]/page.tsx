@@ -2,6 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
+import { BookOpen as BookOpenEmpty } from 'lucide-react';
+import { EmptyState } from '@/components/EmptyState';
 import type { Agent, ConversationKpi, HealthMetric } from '@/lib/types';
 import {
   mockAgents,
@@ -33,6 +35,7 @@ import {
   StatCard,
   PageHeader,
   SectionTitle,
+  DataSourceBadge,
 } from '@/components/ui';
 
 type TabType = 'overview' | 'knowledge' | 'credits' | 'compliance' | 'analytics';
@@ -41,6 +44,9 @@ export default function AgentDetailPage() {
   const params = useParams();
   const botId = params.id as string;
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+
+  // Stable timestamp - computed once on mount to avoid SSR/client hydration mismatch
+  const now = useMemo(() => Date.now(), []);
 
   const agent = useMemo(() => {
     return mockAgents.find((a) => a.botId === botId);
@@ -120,6 +126,7 @@ export default function AgentDetailPage() {
                 {agent.lifecycle.toUpperCase()}
               </Badge>
             )}
+            <DataSourceBadge state="demo" source="sample data" />
           </div>
         }
       />
@@ -142,7 +149,7 @@ export default function AgentDetailPage() {
           icon={Calendar}
           label="Created"
           value={new Date(agent.createdOn).toLocaleDateString()}
-          sublabel={`${Math.floor((new Date().getTime() - new Date(agent.createdOn).getTime()) / (1000 * 60 * 60 * 24))} days ago`}
+          sublabel={`${Math.floor((now - new Date(agent.createdOn).getTime()) / (1000 * 60 * 60 * 24))} days ago`}
           tone="violet"
         />
         <StatCard
@@ -151,7 +158,7 @@ export default function AgentDetailPage() {
           value={agent.lastActivity ? new Date(agent.lastActivity).toLocaleDateString() : 'Never'}
           sublabel={
             agent.lastActivity
-              ? `${Math.floor((new Date().getTime() - new Date(agent.lastActivity).getTime()) / (1000 * 60 * 60 * 24))} days ago`
+              ? `${Math.floor((now - new Date(agent.lastActivity).getTime()) / (1000 * 60 * 60 * 24))} days ago`
               : undefined
           }
           tone="slate"
@@ -237,18 +244,11 @@ export default function AgentDetailPage() {
       {activeTab === 'knowledge' && (
         <Card className="p-6">
           <SectionTitle icon={BookOpen}>Knowledge Sources</SectionTitle>
-          <p className="mb-4 text-sm text-slate-400">
-            Knowledge source configuration not yet available.
-          </p>
-          <div className="rounded-lg bg-slate-950/50 p-4 text-sm text-slate-500">
-            This section would display:
-            <ul className="mt-2 list-inside list-disc space-y-1">
-              <li>Connected knowledge bases</li>
-              <li>SharePoint site sources</li>
-              <li>Document indexing status</li>
-              <li>Last ingestion timestamp</li>
-            </ul>
-          </div>
+          <EmptyState
+            icon={BookOpenEmpty}
+            title="No knowledge sources wired"
+            message="Connect Dataverse or SharePoint to see indexed knowledge bases, document status, and last ingestion timestamps."
+          />
         </Card>
       )}
 

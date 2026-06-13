@@ -12,6 +12,8 @@
 import React, { useState, useMemo } from 'react';
 import type { Agent, LifecycleStage } from '@/lib/types';
 import { mockAgents, mockEnvironments, mockMetrics, mockAlerts } from '@/lib/mock/seed';
+import { Eye } from 'lucide-react';
+import { PageHeader, DataSourceBadge } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,9 +49,9 @@ function stateBadge(state: string) {
   );
 }
 
-function relativeDate(iso: string | null): string {
+function relativeDate(iso: string | null, now: number): string {
   if (!iso) return 'never';
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = now - new Date(iso).getTime();
   const days = Math.floor(diff / 86_400_000);
   if (days === 0) return 'today';
   if (days === 1) return 'yesterday';
@@ -63,9 +65,10 @@ interface AgentRowProps {
   agent: Agent;
   latestCost: number | null;
   openAlerts: number;
+  now: number;
 }
 
-function AgentRow({ agent, latestCost, openAlerts }: AgentRowProps) {
+function AgentRow({ agent, latestCost, openAlerts, now }: AgentRowProps) {
   return (
     <tr className="border-t border-slate-800 hover:bg-slate-800/40 transition-colors">
       <td className="px-4 py-3">
@@ -78,7 +81,7 @@ function AgentRow({ agent, latestCost, openAlerts }: AgentRowProps) {
       <td className="px-4 py-3">{lifecycleBadge(agent.lifecycle)}</td>
       <td className="px-4 py-3">{stateBadge(agent.state)}</td>
       <td className="px-4 py-3 text-sm text-slate-400">
-        {relativeDate(agent.lastActivity)}
+        {relativeDate(agent.lastActivity, now)}
       </td>
       <td className="px-4 py-3 text-sm text-slate-400">
         {latestCost !== null ? `$${latestCost.toFixed(2)}/day` : '-'}
@@ -116,6 +119,9 @@ export default function MakerPage() {
     ALL_OWNERS[0]?.email ?? ''
   );
 
+  // Stable timestamp - computed once on mount to avoid SSR/client hydration mismatch
+  const now = useMemo(() => Date.now(), []);
+
   const myAgents = useMemo(
     () => mockAgents.filter((a) => a.ownerEmail === selectedOwner),
     [selectedOwner]
@@ -151,35 +157,33 @@ export default function MakerPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Maker View</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Scoped to your agents only. In production this reflects the signed-in
-            maker&apos;s identity.
-          </p>
-        </div>
-
-        {/* Owner selector (mock auth) */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-500 whitespace-nowrap" htmlFor="owner-select">
-            Viewing as:
-          </label>
-          <select
-            id="owner-select"
-            value={selectedOwner}
-            onChange={(e) => setSelectedOwner(e.target.value)}
-            className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm
-                       text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-          >
-            {ALL_OWNERS.map((o) => (
-              <option key={o.email} value={o.email}>
-                {o.name} ({o.email})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <PageHeader
+        icon={Eye}
+        title="Maker View"
+        subtitle="Scoped to your agents only. In production this reflects the signed-in maker's identity."
+        badge={<DataSourceBadge state="demo" source="sample data" />}
+        tone="emerald"
+        actions={
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500 whitespace-nowrap" htmlFor="owner-select">
+              Viewing as:
+            </label>
+            <select
+              id="owner-select"
+              value={selectedOwner}
+              onChange={(e) => setSelectedOwner(e.target.value)}
+              className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm
+                         text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            >
+              {ALL_OWNERS.map((o) => (
+                <option key={o.email} value={o.email}>
+                  {o.name} ({o.email})
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -222,6 +226,7 @@ export default function MakerPage() {
                   agent={agent}
                   latestCost={costMap.get(agent.botId) ?? null}
                   openAlerts={alertMap.get(agent.botId) ?? 0}
+                  now={now}
                 />
               ))}
             </tbody>

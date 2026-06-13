@@ -9,20 +9,20 @@
  *   POST https://graph.microsoft.com/v1.0/directoryObjects/getByIds
  *   Body: { ids: string[], types: ["user"] }
  *
+ * T-205: AbortSignal.timeout on every fetch; 429 read Retry-After + retry once.
+ *
  * Falls back to an empty Map (no owner resolution) when credentials are absent.
  */
 
 import type { GraphConnector } from '@/lib/connectors/interfaces';
-import { getToken } from '@/lib/auth/tokenService';
+import { getToken, clearAudienceCache } from '@/lib/auth/tokenService';
+import { hasCoreCredentials } from '@/lib/connectors/config';
 
 const GRAPH_SCOPE = 'https://graph.microsoft.com/.default';
+const FETCH_TIMEOUT_MS = 20_000;
 
 function hasCredentials(): boolean {
-  return Boolean(
-    process.env.AZURE_CLIENT_ID &&
-      process.env.AZURE_CLIENT_SECRET &&
-      process.env.AZURE_TENANT_ID,
-  );
+  return hasCoreCredentials();
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +39,6 @@ interface DirectoryObjectsResponse {
   value: GraphUser[];
 }
 
-// Graph $batch request / response shapes
 interface BatchRequestItem {
   id: string;
   method: string;
@@ -59,12 +58,9 @@ interface BatchResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Live implementation
+// Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Chunk an array into sub-arrays of at most `size` items.
- */
 function chunk<T>(arr: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -73,6 +69,55 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
+/**
+ * Sleep for `ms` milliseconds, capped at 60 s to avoid hanging forever.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.min(ms, 60_000)));
+}
+
+/**
+ * POST to a Graph endpoint with a timeout.
+ * On 429: reads Retry-After header and retries once.
+ * On 401: clears the audience cache (caller can re-acquire on next invocation).
+ */
+async function graphPost(
+  url: string,
+  token: string,
+  body: unknown,
+): Promise<Response> {
+  const doFetch = () =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+
+  let res = await doFetch();
+
+  if (res.status === 429) {
+    const retryAfterSec = Number(res.headers.get('Retry-After') ?? '5');
+    await sleep(retryAfterSec * 1000);
+    res = await doFetch();
+  }
+
+  if (res.status === 401) {
+    // Clear the cached token so the next call re-acquires
+    clearAudienceCache(GRAPH_SCOPE);
+  }
+
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// Live implementation
+// ---------------------------------------------------------------------------
+
 async function liveResolveOwners(
   ids: string[],
 ): Promise<Map<string, { name: string; email: string }>> {
@@ -80,38 +125,25 @@ async function liveResolveOwners(
   if (ids.length === 0) return result;
 
   const token = await getToken(GRAPH_SCOPE);
+  if (!token) return result;
 
-  // Graph batch allows up to 20 requests per call; directoryObjects/getByIds
-  // accepts up to 1000 IDs per request but we batch in chunks of 200 for safety.
   const idChunks = chunk(ids, 200);
 
   for (const idChunk of idChunks) {
-    // POST https://graph.microsoft.com/v1.0/directoryObjects/getByIds
-    const resp = await fetch(
+    const res = await graphPost(
       'https://graph.microsoft.com/v1.0/directoryObjects/getByIds',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ ids: idChunk, types: ['user'] }),
-      },
+      token,
+      { ids: idChunk, types: ['user'] },
     );
 
-    if (!resp.ok) {
-      // Non-fatal: skip this chunk, leave IDs unresolved
-      console.warn(
-        `[graph] directoryObjects/getByIds failed: ${resp.status} ${resp.statusText}`,
-      );
+    if (!res.ok) {
+      console.warn(`[graph] directoryObjects/getByIds failed: ${res.status} ${res.statusText}`);
       continue;
     }
 
-    const body = (await resp.json()) as DirectoryObjectsResponse;
+    const body = (await res.json()) as DirectoryObjectsResponse;
     for (const user of body.value) {
-      const email =
-        user.mail ?? user.userPrincipalName ?? '';
+      const email = user.mail ?? user.userPrincipalName ?? '';
       const name = user.displayName ?? email;
       if (user.id && email) {
         result.set(user.id, { name, email });
@@ -122,12 +154,6 @@ async function liveResolveOwners(
   return result;
 }
 
-/**
- * Batch-resolve multiple owner IDs using the Graph $batch endpoint.
- * Each batch request targets /users/{id}?$select=id,displayName,mail
- * This is an alternative path used when IDs are individual user GUIDs
- * from Dataverse ownerid lookups.
- */
 async function liveBatchResolveOwners(
   ids: string[],
 ): Promise<Map<string, { name: string; email: string }>> {
@@ -135,8 +161,8 @@ async function liveBatchResolveOwners(
   if (ids.length === 0) return result;
 
   const token = await getToken(GRAPH_SCOPE);
+  if (!token) return result;
 
-  // Graph $batch max 20 requests per call
   const idChunks = chunk(ids, 20);
 
   for (const idChunk of idChunks) {
@@ -146,23 +172,18 @@ async function liveBatchResolveOwners(
       url: `/users/${id}?$select=id,displayName,mail,userPrincipalName`,
     }));
 
-    // POST https://graph.microsoft.com/v1.0/$batch
-    const resp = await fetch('https://graph.microsoft.com/v1.0/$batch', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ requests: batchRequests }),
-    });
+    const res = await graphPost(
+      'https://graph.microsoft.com/v1.0/$batch',
+      token,
+      { requests: batchRequests },
+    );
 
-    if (!resp.ok) {
-      console.warn(`[graph] $batch failed: ${resp.status} ${resp.statusText}`);
+    if (!res.ok) {
+      console.warn(`[graph] $batch failed: ${res.status} ${res.statusText}`);
       continue;
     }
 
-    const body = (await resp.json()) as BatchResponse;
+    const body = (await res.json()) as BatchResponse;
     for (const response of body.responses) {
       if (response.status === 200 && response.body) {
         const user = response.body as GraphUser;
@@ -187,19 +208,14 @@ export const graph: GraphConnector = {
     ids: string[],
   ): Promise<Map<string, { name: string; email: string }>> {
     if (!hasCredentials()) {
-      // Offline: return an empty map - owner fields remain null
       return new Map();
     }
 
-    // Use directoryObjects/getByIds as primary path (most efficient for batches)
-    // Fall back to $batch if the primary call surface returns nothing useful
     try {
       const primary = await liveResolveOwners(ids);
       if (primary.size > 0) return primary;
-      // If no results from getByIds (e.g. guest accounts), try $batch /users/
       return liveBatchResolveOwners(ids);
     } catch {
-      // Non-fatal: return empty map
       return new Map();
     }
   },

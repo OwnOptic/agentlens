@@ -7,12 +7,16 @@
  *   3. Azure AI Foundry agents              -> Foundry project REST API (/agents)
  *   4. Microsoft Fabric data agents         -> Fabric Admin REST API (/admin/items?type=DataAgent)
  *
+ * T-202: Promise.allSettled so one failing source never rejects the whole sweep.
+ *        Token acquisition is INSIDE each source's try/catch so a token error
+ *        degrades that one source to status='error' only.
+ *
  * Each source is queried only if its token is configured; otherwise it degrades to
- * "not_configured" so the rest of the sweep still returns. See
- * reference_all_microsoft_agents_discovery for the full API map.
+ * "not_configured" so the rest of the sweep still returns.
  */
 
 import { getArmToken, getGraphToken, getToken } from '@/lib/auth/tokenService';
+import { fetchArgAll } from '@/lib/connectors/odata';
 
 export type AgentPlatform =
   | 'copilot_studio'
@@ -28,6 +32,8 @@ export interface UnifiedAgent {
   owner: string | null;
   location: string | null; // environment / project / workspace
   source: string;          // the API it was discovered through
+  status?: 'error';
+  error?: string;
   details?: Record<string, unknown>;
 }
 
@@ -50,19 +56,6 @@ export interface DiscoveryResult {
   total: number;
 }
 
-const ARG = 'https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01';
-
-async function argQuery(token: string, query: string): Promise<Record<string, unknown>[]> {
-  const res = await fetch(ARG, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, options: { resultFormat: 'objectArray' } }),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`ARG ${res.status}`);
-  return (await res.json()).data ?? [];
-}
-
 /* 1) Power Platform: Copilot Studio + M365 Agent Builder ----------- */
 async function discoverPowerPlatform(): Promise<DiscoverySource> {
   const base: DiscoverySource = {
@@ -74,27 +67,38 @@ async function discoverPowerPlatform(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  const token = await getArmToken();
-  if (!token) return base;
+
+  // Token acquisition is INSIDE try/catch so a token failure degrades only this source
   try {
-    const rows = await argQuery(
+    const token = await getArmToken();
+    if (!token) return base;
+
+    const { rows, truncated } = await fetchArgAll(
       token,
       "PowerPlatformResources | where type == 'microsoft.copilotstudio/agents' | project name, properties | limit 500",
     );
+
     const agents: UnifiedAgent[] = rows.map((r) => {
-      const p = (r.properties ?? {}) as Record<string, unknown>;
-      const createdIn = String(p.createdIn ?? '');
+      const p = (r['properties'] ?? {}) as Record<string, unknown>;
+      const createdIn = String(p['createdIn'] ?? '');
       return {
-        id: String(r.name),
-        name: String(p.displayName ?? r.name),
+        id: String(r['name']),
+        name: String(p['displayName'] ?? r['name']),
         platform: createdIn.includes('Agent Builder') ? 'm365_agentbuilder' : 'copilot_studio',
-        owner: (p.ownerId as string) ?? null,
-        location: (p.environmentId as string) ?? null,
+        owner: (p['ownerId'] as string) ?? null,
+        location: (p['environmentId'] as string) ?? null,
         source: 'arg',
-        details: { model: p.model, authentication: p.authentication, channels: p.channels },
+        details: { model: p['model'], authentication: p['authentication'], channels: p['channels'] },
       };
     });
-    return { ...base, status: 'ok', count: agents.length, agents };
+
+    return {
+      ...base,
+      status: 'ok',
+      count: agents.length,
+      agents,
+      ...(truncated ? { error: 'Result set truncated at 5000 rows' } : {}),
+    };
   } catch (e) {
     return { ...base, status: 'error', error: e instanceof Error ? e.message : String(e) };
   }
@@ -111,24 +115,30 @@ async function discoverM365(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  const token = await getGraphToken();
-  if (!token) return base;
+
   try {
+    const token = await getGraphToken();
+    if (!token) return base;
+
     // Package Management API - REQUIRES a Microsoft Agent 365 license (else 403).
     const res = await fetch(
       "https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$filter=supportedHosts/any(h:h eq 'Copilot')",
-      { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(20_000),
+      },
     );
     if (res.status === 403) throw new Error('403 - requires a Microsoft Agent 365 license (AI Admin + CopilotPackages.Read.All)');
     if (!res.ok) throw new Error(`Graph ${res.status}`);
-    const json = await res.json();
+    const json = (await res.json()) as { value?: Record<string, unknown>[] };
     const items: Record<string, unknown>[] = json.value ?? [];
     const agents: UnifiedAgent[] = items.map((it) => ({
-      id: String(it.id ?? ''),
-      name: String(it.displayName ?? it.name ?? 'Unknown'),
+      id: String(it['id'] ?? ''),
+      name: String(it['displayName'] ?? it['name'] ?? 'Unknown'),
       platform: 'm365_declarative',
-      owner: ((it.publisherName ?? it.publisher) as string) ?? null,
-      location: Array.isArray(it.elementTypes) ? (it.elementTypes as string[]).join(', ') : 'Microsoft 365',
+      owner: ((it['publisherName'] ?? it['publisher']) as string) ?? null,
+      location: Array.isArray(it['elementTypes']) ? (it['elementTypes'] as string[]).join(', ') : 'Microsoft 365',
       source: 'graph-copilotPackages',
       details: it,
     }));
@@ -149,21 +159,26 @@ async function discoverFoundry(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  // Foundry uses the ARM audience
-  const token = await getToken('https://management.azure.com/.default', 'MVP_FOUNDRY_TOKEN');
-  const endpoint = process.env.MVP_FOUNDRY_PROJECT_ENDPOINT; // https://{acct}.services.ai.azure.com/api/projects/{project}
-  if (!token || !endpoint) return base;
+
   try {
+    const endpoint = process.env.MVP_FOUNDRY_PROJECT_ENDPOINT;
+    if (!endpoint) return base;
+
+    // Foundry uses the ARM audience
+    const token = await getToken('https://management.azure.com/.default', 'MVP_FOUNDRY_TOKEN');
+    if (!token) return base;
+
     const res = await fetch(`${endpoint.replace(/\/$/, '')}/agents?api-version=v1`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) throw new Error(`Foundry ${res.status}`);
-    const json = await res.json();
+    const json = (await res.json()) as { data?: Record<string, unknown>[]; value?: Record<string, unknown>[] };
     const items: Record<string, unknown>[] = json.data ?? json.value ?? [];
     const agents: UnifiedAgent[] = items.map((it) => ({
-      id: String(it.id ?? it.name ?? ''),
-      name: String(it.name ?? 'Unknown'),
+      id: String(it['id'] ?? it['name'] ?? ''),
+      name: String(it['name'] ?? 'Unknown'),
       platform: 'foundry',
       owner: null,
       location: endpoint.split('/projects/')[1] ?? 'Foundry project',
@@ -187,23 +202,26 @@ async function discoverFabric(): Promise<DiscoverySource> {
     count: 0,
     agents: [],
   };
-  // Fabric uses the Power BI / Fabric audience; fall back to MVP_FABRIC_TOKEN dev env
-  const token = await getToken('https://analysis.windows.net/powerbi/api/.default', 'MVP_FABRIC_TOKEN');
-  if (!token) return base;
+
   try {
+    // Fabric uses the Power BI / Fabric audience; fall back to MVP_FABRIC_TOKEN dev env
+    const token = await getToken('https://analysis.windows.net/powerbi/api/.default', 'MVP_FABRIC_TOKEN');
+    if (!token) return base;
+
     const res = await fetch('https://api.fabric.microsoft.com/v1/admin/items?type=DataAgent', {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) throw new Error(`Fabric ${res.status}`);
-    const json = await res.json();
+    const json = (await res.json()) as { itemEntities?: Record<string, unknown>[]; value?: Record<string, unknown>[] };
     const items: Record<string, unknown>[] = json.itemEntities ?? json.value ?? [];
     const agents: UnifiedAgent[] = items.map((it) => ({
-      id: String(it.id ?? ''),
-      name: String(it.name ?? it.displayName ?? 'Unknown'),
+      id: String(it['id'] ?? ''),
+      name: String(it['name'] ?? it['displayName'] ?? 'Unknown'),
       platform: 'fabric',
       owner: null,
-      location: (it.workspaceId as string) ?? 'Fabric workspace',
+      location: (it['workspaceId'] as string) ?? 'Fabric workspace',
       source: 'fabric-admin',
       details: it,
     }));
@@ -213,14 +231,37 @@ async function discoverFabric(): Promise<DiscoverySource> {
   }
 }
 
-/** Run all sources in parallel and aggregate. */
+/**
+ * Run all sources via Promise.allSettled - a rejected source maps to status='error'
+ * instead of rejecting the whole sweep.
+ */
 export async function discoverAllAgents(): Promise<DiscoveryResult> {
-  const sources = await Promise.all([
+  const settled = await Promise.allSettled([
     discoverPowerPlatform(),
     discoverM365(),
     discoverFoundry(),
     discoverFabric(),
   ]);
+
+  const sources: DiscoverySource[] = settled.map((result, i) => {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    }
+    // Unexpected rejection from a source (internal bug) - surface as error
+    const labels = ['power_platform', 'm365', 'foundry', 'fabric'];
+    const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    return {
+      key: labels[i] ?? `source_${i}`,
+      label: labels[i] ?? `Source ${i}`,
+      api: 'unknown',
+      requiredRole: 'unknown',
+      status: 'error' as SourceStatus,
+      count: 0,
+      error: reason,
+      agents: [],
+    };
+  });
+
   return {
     fetchedAt: new Date().toISOString(),
     sources,

@@ -35,6 +35,7 @@ import {
   Boxes,
   Gauge,
   RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   Card,
@@ -43,7 +44,10 @@ import {
   PageHeader,
   SectionTitle,
   Button,
+  DataSourceBadge,
+  InfoTip,
 } from '@/components/ui';
+import { SkeletonCard } from '@/components/Skeleton';
 
 interface TopBurner {
   agent: Agent | undefined;
@@ -81,16 +85,19 @@ export default function CostPage() {
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     async function fetchCostData() {
+      setFetchError(false);
       try {
         const res = await fetch('/api/cost');
         const json = await res.json();
         setData(json);
       } catch (error) {
         console.error('Failed to fetch cost data:', error);
-        // Fallback to mock
+        setFetchError(true);
+        // Still populate with mock so the rest of the page renders
         setData({
           metrics: mockMetrics,
           capacity: mockCapacity,
@@ -130,8 +137,19 @@ export default function CostPage() {
 
   if (loading || !data) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
-        <p className="text-slate-400">Loading cost data...</p>
+      <div className="p-8">
+        <PageHeader
+          icon={DollarSign}
+          title="Cost & Capacity"
+          subtitle="Monitor credit consumption, projections, and environment capacity"
+          tone="emerald"
+          badge={<DataSourceBadge state="demo" source="sample data" />}
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -175,40 +193,72 @@ export default function CostPage() {
         subtitle="Monitor credit consumption, projections, and environment capacity"
         tone="emerald"
         badge={
-          <span className="text-xs text-slate-500">
-            Last updated: {new Date(data.timestamp).toLocaleTimeString()}
-          </span>
+          <div className="flex items-center gap-2">
+            <DataSourceBadge state="demo" source="sample data" />
+            <span className="text-xs text-slate-500" suppressHydrationWarning>
+              Last updated: {new Date(data.timestamp).toLocaleTimeString()}
+            </span>
+          </div>
         }
       />
+
+      {fetchError && (
+        <Card className="mb-6 flex items-center gap-3 p-4">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+          <p className="text-sm text-amber-300">
+            Live cost data unavailable - showing sample data. Check the API connection.
+          </p>
+        </Card>
+      )}
 
       {/* Cost Summary StatCards */}
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard
           icon={DollarSign}
           label="MTD Cost"
-          value={formatCost(data.summary.totalMtd)}
-          sublabel="estimated"
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              {formatCost(data.summary.totalMtd)}
+              <InfoTip>Sample figure - connect the PPAC Licensing API to see real MTD cost.</InfoTip>
+            </span>
+          }
+          sublabel="sample data"
           tone="emerald"
         />
         <StatCard
           icon={TrendingUp}
           label="Projected Monthly"
-          value={formatCost(data.summary.totalProjectedMonthly)}
-          sublabel="estimated"
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              {formatCost(data.summary.totalProjectedMonthly)}
+              <InfoTip>Sample figure - projected monthly spend derived from seed data until a live source is wired.</InfoTip>
+            </span>
+          }
+          sublabel="sample data"
           tone="sky"
         />
         <StatCard
           icon={Activity}
           label="7-Day Baseline"
-          value={formatCost(data.summary.totalBaseline7)}
-          sublabel="estimated"
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              {formatCost(data.summary.totalBaseline7)}
+              <InfoTip>Sample figure - 7-day rolling baseline from seed metrics.</InfoTip>
+            </span>
+          }
+          sublabel="sample data"
           tone="violet"
         />
         <StatCard
           icon={Boxes}
           label="Active Agents"
-          value={data.summary.agentCount}
-          sublabel="with cost data"
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              {data.summary.agentCount}
+              <InfoTip>Count from sample seed data - not your live tenant.</InfoTip>
+            </span>
+          }
+          sublabel="sample data"
           tone="slate"
         />
       </div>

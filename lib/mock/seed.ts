@@ -27,6 +27,23 @@ import type {
 } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
+// Production guard
+//
+// Call assertNotProduction() at the top of any *FromMock convenience function
+// that returns mock data as if it were real. Importing this module for type
+// purposes is always safe; the guard only fires when mock data is actively
+// served through a production code path.
+// ---------------------------------------------------------------------------
+export function assertNotProduction(): void {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Mock seed data must not be served in production. ' +
+        'Connect a real data source or remove the *FromMock call path.',
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Environments (4 envs: default, dev, uat, prod)
 // ---------------------------------------------------------------------------
 export const mockEnvironments: Environment[] = [

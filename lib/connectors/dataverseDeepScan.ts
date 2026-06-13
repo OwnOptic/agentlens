@@ -5,28 +5,32 @@
  * configuration to detect governance signals (auth mode, channels, connectors,
  * risky patterns, DLP review status, knowledge sources).
  *
- * Real endpoints queried per bot:
- *   - Bot record:
- *       GET {orgUrl}/api/data/v9.2/bots({botId})?$select=botid,name,schemaname,authmode,msdyn_publishedon,msdyn_dlpreviewed,msdyn_httpenabled,msdyn_httpapproved,msdyn_lifecycle,msdyn_tenantscope
- *   - Channels:
- *       GET {orgUrl}/api/data/v9.2/botcomponents?$filter=_parentbotid_value eq '{botId}' and componenttype eq 1&$select=name,componenttype
- *   - Connectors (Power Automate flows linked to the bot):
- *       GET {orgUrl}/api/data/v9.2/workflows?$filter=_parentbotid_value eq '{botId}'&$select=name,type,connectors
- *   - Knowledge sources:
- *       GET {orgUrl}/api/data/v9.2/msdyn_botknowledgesources?$filter=_msdyn_botid_value eq '{botId}'&$select=msdyn_name,msdyn_type,msdyn_siteurl
+ * T-203: validate botId against a GUID regex before interpolating into OData URLs.
+ * T-201: use fetchODataAll for list queries (channels, flows, knowledge sources).
+ * T-501: hasCredentials() delegates to hasCoreCredentials().
  *
  * Falls back to a deterministic mock payload when credentials are absent.
  */
 
 import type { DataverseDeepScanConnector } from '@/lib/connectors/interfaces';
 import { getDataverseToken } from '@/lib/auth/tokenService';
+import { fetchODataAll } from '@/lib/connectors/odata';
+import { hasCoreCredentials } from '@/lib/connectors/config';
 
 function hasCredentials(): boolean {
-  return Boolean(
-    process.env.AZURE_CLIENT_ID &&
-      process.env.AZURE_CLIENT_SECRET &&
-      process.env.AZURE_TENANT_ID,
-  );
+  return hasCoreCredentials();
+}
+
+// ---------------------------------------------------------------------------
+// GUID validation (T-203)
+// ---------------------------------------------------------------------------
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertGuid(value: string, label: string): void {
+  if (!GUID_RE.test(value)) {
+    throw new Error(`${label} is not a valid GUID: "${value}"`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -53,32 +57,8 @@ function mockScanPayload(botId: string): Record<string, unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Dataverse Web API helpers
+// Dataverse Web API response shapes
 // ---------------------------------------------------------------------------
-async function fetchDataverse<T>(
-  orgUrl: string,
-  path: string,
-  token: string,
-): Promise<T> {
-  const base = orgUrl.replace(/\/$/, '');
-  // {orgUrl}/api/data/v9.2/{path}
-  const url = `${base}/api/data/v9.2/${path}`;
-  const resp = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'OData-MaxVersion': '4.0',
-      'OData-Version': '4.0',
-      Accept: 'application/json',
-      Prefer: 'odata.include-annotations="*"',
-    },
-  });
-  if (!resp.ok) {
-    throw new Error(
-      `Dataverse query failed [${path}]: ${resp.status} ${resp.statusText}`,
-    );
-  }
-  return resp.json() as Promise<T>;
-}
 
 interface BotRecord {
   botid: string;
@@ -109,8 +89,33 @@ interface KnowledgeSource {
   msdyn_siteurl?: string | null;
 }
 
-interface ODataList<T> {
-  value: T[];
+// ---------------------------------------------------------------------------
+// Single-record fetch (bot record - not a list, no pagination needed)
+// ---------------------------------------------------------------------------
+async function fetchBotRecord(
+  orgUrl: string,
+  botId: string,
+  token: string,
+): Promise<BotRecord> {
+  const base = orgUrl.replace(/\/$/, '');
+  const url =
+    `${base}/api/data/v9.2/bots(${botId})` +
+    `?$select=botid,name,authmode,msdyn_publishedon,msdyn_dlpreviewed,msdyn_httpenabled,msdyn_httpapproved,msdyn_lifecycle,msdyn_tenantscope`;
+
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'OData-MaxVersion': '4.0',
+      'OData-Version': '4.0',
+      Accept: 'application/json',
+      Prefer: 'odata.include-annotations="*"',
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!resp.ok) {
+    throw new Error(`Dataverse bot record failed [bots(${botId})]: ${resp.status} ${resp.statusText}`);
+  }
+  return resp.json() as Promise<BotRecord>;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,35 +125,41 @@ async function liveScan(
   orgUrl: string,
   botId: string,
 ): Promise<Record<string, unknown>> {
+  // T-203: validate GUID before any URL interpolation
+  assertGuid(botId, 'botId');
+
   const token = await getDataverseToken(orgUrl);
   if (!token) throw new Error(`No token available for Dataverse org: ${orgUrl}`);
+
+  const base = orgUrl.replace(/\/$/, '');
+  const odataHeaders = {
+    'OData-MaxVersion': '4.0',
+    'OData-Version': '4.0',
+    Prefer: 'odata.include-annotations="*"',
+  };
 
   // Run all four Dataverse queries in parallel
   const [botResult, channelsResult, flowsResult, kbResult] =
     await Promise.allSettled([
-      // Bot record
-      fetchDataverse<BotRecord>(
-        orgUrl,
-        `bots(${botId})?$select=botid,name,authmode,msdyn_publishedon,msdyn_dlpreviewed,msdyn_httpenabled,msdyn_httpapproved,msdyn_lifecycle,msdyn_tenantscope`,
-        token,
-      ),
+      // Bot record (single entity - not a list)
+      fetchBotRecord(orgUrl, botId, token),
       // Channel components (componenttype = 1)
-      fetchDataverse<ODataList<BotComponent>>(
-        orgUrl,
-        `botcomponents?$filter=_parentbotid_value eq '${botId}' and componenttype eq 1&$select=name,componenttype`,
+      fetchODataAll<BotComponent>(
+        `${base}/api/data/v9.2/botcomponents?$filter=_parentbotid_value eq '${botId}' and componenttype eq 1&$select=name,componenttype`,
         token,
+        { headers: odataHeaders },
       ),
       // Linked Power Automate workflows
-      fetchDataverse<ODataList<BotWorkflow>>(
-        orgUrl,
-        `workflows?$filter=_parentbotid_value eq '${botId}'&$select=name,type,connectors`,
+      fetchODataAll<BotWorkflow>(
+        `${base}/api/data/v9.2/workflows?$filter=_parentbotid_value eq '${botId}'&$select=name,type,connectors`,
         token,
+        { headers: odataHeaders },
       ),
       // Knowledge sources
-      fetchDataverse<ODataList<KnowledgeSource>>(
-        orgUrl,
-        `msdyn_botknowledgesources?$filter=_msdyn_botid_value eq '${botId}'&$select=msdyn_name,msdyn_type,msdyn_siteurl`,
+      fetchODataAll<KnowledgeSource>(
+        `${base}/api/data/v9.2/msdyn_botknowledgesources?$filter=_msdyn_botid_value eq '${botId}'&$select=msdyn_name,msdyn_type,msdyn_siteurl`,
         token,
+        { headers: odataHeaders },
       ),
     ]);
 
@@ -159,12 +170,12 @@ async function liveScan(
 
   const channels =
     channelsResult.status === 'fulfilled'
-      ? channelsResult.value.value.map((c) => c.name)
+      ? channelsResult.value.rows.map((c) => c.name)
       : [];
 
   const rawConnectors =
     flowsResult.status === 'fulfilled'
-      ? flowsResult.value.value.flatMap((f) => {
+      ? flowsResult.value.rows.flatMap((f) => {
           if (!f.connectors) return [];
           try {
             const parsed = JSON.parse(f.connectors) as string[];
@@ -178,7 +189,7 @@ async function liveScan(
 
   const knowledgeSources =
     kbResult.status === 'fulfilled'
-      ? kbResult.value.value.map((k) => ({
+      ? kbResult.value.rows.map((k) => ({
           name: k.msdyn_name,
           type: k.msdyn_type ?? 'unknown',
           siteUrl: k.msdyn_siteurl ?? null,

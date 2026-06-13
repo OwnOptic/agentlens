@@ -23,7 +23,7 @@ import React from 'react';
 import Link from 'next/link';
 import { LogOut, LogIn, UserCircle2 } from 'lucide-react';
 
-type ChipState = 'loading' | 'no_auth' | 'unauthenticated' | 'authenticated';
+type ChipState = 'loading' | 'no_auth' | 'unauthenticated' | 'authenticated' | 'error';
 
 interface ChipInfo {
   state: ChipState;
@@ -58,8 +58,8 @@ function useAuthChip(): ChipInfo {
             : { state: 'unauthenticated' },
         );
       } catch {
-        // Endpoints unreachable -> treat as auth-optional so the chip never blocks the UI
-        if (!cancelled) setInfo({ state: 'no_auth' });
+        // Fetch threw (network error, CORS, etc.) - distinguish from a genuinely unconfigured auth
+        if (!cancelled) setInfo({ state: 'error' });
       }
     })();
     return () => {
@@ -88,6 +88,26 @@ export function UserChip({ collapsed = false }: UserChipProps) {
       <div className="h-5 w-5 animate-pulse rounded-full bg-slate-700" />
     ) : (
       <div className="h-5 w-24 animate-pulse rounded bg-slate-800" />
+    );
+  }
+
+  // Transient fetch error - neutral indicator, no "set up" hint
+  if (state === 'error') {
+    if (collapsed) {
+      return (
+        <div
+          title="Auth status unavailable"
+          className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 ring-1 ring-slate-700"
+        >
+          <UserCircle2 className="h-3.5 w-3.5 text-slate-500" strokeWidth={2} />
+        </div>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/80 px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-700">
+        <UserCircle2 className="h-3 w-3 shrink-0" strokeWidth={2} />
+        Auth unavailable
+      </span>
     );
   }
 

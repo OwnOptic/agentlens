@@ -3,7 +3,11 @@
  *
  * Lists Power Platform environments and Copilot Studio agents using:
  *   - Environments: BAP API  https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments?api-version=2021-04-01
- *   - Agents:       Dataverse Web API  {orgUrl}/api/data/v9.2/bots?$select=botid,name,ownerid,statecode,createdon,modifiedon,lastactivity,msdyn_lifecycle
+ *   - Agents:       Dataverse Web API  {orgUrl}/api/data/v9.2/bots?$select=...
+ *
+ * T-201: uses fetchODataAll for both the BAP environment list and the per-env
+ *        Dataverse bot list (pagination + timeout).
+ * T-501: hasCredentials() delegates to hasCoreCredentials().
  *
  * If AZURE_CLIENT_ID / AZURE_CLIENT_SECRET / AZURE_TENANT_ID are absent
  * the connector falls back to mock seed data so the app runs offline.
@@ -12,15 +16,12 @@
 import type { ArgInventoryConnector } from '@/lib/connectors/interfaces';
 import type { Agent, Environment, LifecycleStage } from '@/lib/types';
 import { getToken, getDataverseToken } from '@/lib/auth/tokenService';
+import { fetchODataAll } from '@/lib/connectors/odata';
+import { hasCoreCredentials } from '@/lib/connectors/config';
 import { mockAgents, mockEnvironments } from '@/lib/mock/seed';
 
-/** True when the Azure AD credentials are present in the environment */
 function hasCredentials(): boolean {
-  return Boolean(
-    process.env.AZURE_CLIENT_ID &&
-      process.env.AZURE_CLIENT_SECRET &&
-      process.env.AZURE_TENANT_ID,
-  );
+  return hasCoreCredentials();
 }
 
 // ---------------------------------------------------------------------------
@@ -40,10 +41,6 @@ interface BapEnvironment {
   };
 }
 
-interface BapListResponse {
-  value: BapEnvironment[];
-}
-
 // ---------------------------------------------------------------------------
 // Dataverse bot row shape (partial)
 // ---------------------------------------------------------------------------
@@ -56,10 +53,6 @@ interface DataverseBot {
   modifiedon: string;
   lastactivity?: string | null;
   msdyn_lifecycle?: string | null; // "poc" | "pilot" | "prod" custom column
-}
-
-interface DataverseBotListResponse {
-  value: DataverseBot[];
 }
 
 // ---------------------------------------------------------------------------
@@ -103,45 +96,41 @@ function mapDataverseBot(envId: string, bot: DataverseBot): Agent {
 // Live implementation
 // ---------------------------------------------------------------------------
 async function liveListEnvironments(): Promise<Environment[]> {
-  // https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments?api-version=2021-04-01
-  const token = await getToken(
-    'https://service.powerapps.com/.default',
-  );
-  const resp = await fetch(
-    'https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments?api-version=2021-04-01&$expand=properties.linkedEnvironmentMetadata',
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!resp.ok) {
-    throw new Error(
-      `BAP listEnvironments failed: ${resp.status} ${resp.statusText}`,
-    );
-  }
-  const body = (await resp.json()) as BapListResponse;
-  return body.value.map(mapBapEnv);
+  const token = await getToken('https://service.powerapps.com/.default');
+  if (!token) throw new Error('No token for BAP listEnvironments');
+
+  const url =
+    'https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments' +
+    '?api-version=2021-04-01&$expand=properties.linkedEnvironmentMetadata';
+
+  const { rows } = await fetchODataAll<BapEnvironment>(url, token, {
+    timeoutMs: 20_000,
+    maxRows: 1_000, // generous cap - most tenants have <200 envs
+  });
+
+  return rows.map(mapBapEnv);
 }
 
 async function liveListAgentsForEnv(env: Environment): Promise<Agent[]> {
   if (!env.orgUrl) return [];
-  // https://{org}.crm.dynamics.com/api/data/v9.2/bots?$select=botid,name,ownerid,statecode,createdon,modifiedon,lastactivity,msdyn_lifecycle
+
   const token = await getDataverseToken(env.orgUrl);
+  if (!token) throw new Error(`No token for Dataverse org: ${env.orgUrl}`);
+
   const url =
     `${env.orgUrl.replace(/\/$/, '')}/api/data/v9.2/bots` +
     `?$select=botid,name,ownerid,statecode,createdon,modifiedon,lastactivity,msdyn_lifecycle`;
-  const resp = await fetch(url, {
+
+  const { rows } = await fetchODataAll<DataverseBot>(url, token, {
+    timeoutMs: 20_000,
+    maxRows: 5_000,
     headers: {
-      Authorization: `Bearer ${token}`,
       'OData-MaxVersion': '4.0',
       'OData-Version': '4.0',
-      Accept: 'application/json',
     },
   });
-  if (!resp.ok) {
-    throw new Error(
-      `Dataverse bots query failed (${env.id}): ${resp.status} ${resp.statusText}`,
-    );
-  }
-  const body = (await resp.json()) as DataverseBotListResponse;
-  return body.value.map((b) => mapDataverseBot(env.id, b));
+
+  return rows.map((b) => mapDataverseBot(env.id, b));
 }
 
 // ---------------------------------------------------------------------------

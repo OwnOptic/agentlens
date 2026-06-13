@@ -37,12 +37,16 @@ const PENDING = [
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
+    setFetchError(null);
     try {
       const res = await fetch('/api/overview', { cache: 'no-store' });
       setData(await res.json());
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Network error');
     } finally {
       setLoading(false);
     }
@@ -65,7 +69,20 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {!loading && data && (
+      {!loading && fetchError && (
+        <Card className="p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-300">Could not load overview data</p>
+              <p className="mt-1 text-sm text-slate-400">{fetchError}</p>
+            </div>
+            <Button icon={RefreshCw} onClick={load}>Retry</Button>
+          </div>
+        </Card>
+      )}
+
+      {!loading && !fetchError && data && (
         <div className="space-y-8">
           {!data.connected && (
             <Card className="p-4">

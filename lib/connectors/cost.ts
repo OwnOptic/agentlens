@@ -2,10 +2,12 @@
  * cost connector
  *
  * Retrieves daily agent credit consumption and environment capacity from:
- *   - Metrics: Power Platform Licensing API
- *       https://licensing.powerplatform.microsoft.com/api/usage/v1/billingPolicies/{policyId}/copilotMessages?startDate=...&endDate=...
- *   - Capacity: PPAC admin API
- *       https://api.powerplatform.com/licensing/v1/billingPolicies (lists policies w/ creditLimit)
+ *   - Metrics: Power Platform Licensing API (single-page response, no nextLink)
+ *   - Capacity: PPAC admin API billingPolicies (paginated via fetchODataAll)
+ *
+ * T-201: uses fetchODataAll for billingPolicies list; adds AbortSignal.timeout
+ *        on the metrics fetch.
+ * T-501: hasCredentials() delegates to hasCoreCredentials() + PPAC_BILLING_POLICY_ID.
  *
  * Falls back to mock seed data when PPAC_BILLING_POLICY_ID is not configured.
  */
@@ -13,15 +15,12 @@
 import type { CostConnector } from '@/lib/connectors/interfaces';
 import type { AgentMetricDaily, Capacity, CreditBreakdown } from '@/lib/types';
 import { getToken } from '@/lib/auth/tokenService';
+import { fetchODataAll } from '@/lib/connectors/odata';
+import { hasCoreCredentials } from '@/lib/connectors/config';
 import { mockMetrics, mockCapacity } from '@/lib/mock/seed';
 
 function hasCredentials(): boolean {
-  return Boolean(
-    process.env.AZURE_CLIENT_ID &&
-      process.env.AZURE_CLIENT_SECRET &&
-      process.env.AZURE_TENANT_ID &&
-      process.env.PPAC_BILLING_POLICY_ID,
-  );
+  return Boolean(hasCoreCredentials() && process.env.PPAC_BILLING_POLICY_ID);
 }
 
 // ---------------------------------------------------------------------------
@@ -51,10 +50,6 @@ interface BillingPolicy {
   creditUsed: number;
 }
 
-interface BillingPoliciesResponse {
-  value: BillingPolicy[];
-}
-
 // ---------------------------------------------------------------------------
 // Cost estimation helper (partner estimation model, not official billing)
 // Standard meter: $0.01 per message; Premium meter: ~$0.025 per message
@@ -75,32 +70,29 @@ function daysInCurrentMonth(): number {
 async function liveGetDailyMetrics(orgUrl: string): Promise<AgentMetricDaily[]> {
   const policyId = process.env.PPAC_BILLING_POLICY_ID ?? '';
   const token = await getToken('https://licensing.powerplatform.microsoft.com/.default');
+  if (!token) throw new Error('No token for PPAC licensing API');
 
-  // Query the last 30 days
   const end = new Date();
   const start = new Date(end);
   start.setDate(start.getDate() - 30);
   const startDate = start.toISOString().split('T')[0];
   const endDate = end.toISOString().split('T')[0];
 
-  // https://licensing.powerplatform.microsoft.com/api/usage/v1/billingPolicies/{policyId}/copilotMessages?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
   const url =
     `https://licensing.powerplatform.microsoft.com/api/usage/v1/billingPolicies/${policyId}/copilotMessages` +
     `?startDate=${startDate}&endDate=${endDate}`;
 
+  // Metrics endpoint returns a single-page response (no nextLink); add timeout explicitly
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(20_000),
   });
   if (!resp.ok) {
-    throw new Error(
-      `PPAC copilotMessages failed: ${resp.status} ${resp.statusText}`,
-    );
+    throw new Error(`PPAC copilotMessages failed: ${resp.status} ${resp.statusText}`);
   }
   const body = (await resp.json()) as CopilotMessagesResponse;
 
-  // Filter rows to the requested orgUrl environment (best-effort env-id match)
   const envIdSegment = orgUrl.replace(/\/$/, '').split('.')[0].split('//')[1] ?? '';
-
   const totalDaysInMonth = daysInCurrentMonth();
 
   return body.value
@@ -135,19 +127,17 @@ async function liveGetDailyMetrics(orgUrl: string): Promise<AgentMetricDaily[]> 
 }
 
 async function liveGetCapacity(): Promise<Capacity[]> {
-  // https://api.powerplatform.com/licensing/v1/billingPolicies
   const token = await getToken('https://api.powerplatform.com/.default');
-  const resp = await fetch(
+  if (!token) throw new Error('No token for PPAC API');
+
+  // T-201: billingPolicies may paginate in large tenants
+  const { rows } = await fetchODataAll<BillingPolicy>(
     'https://api.powerplatform.com/licensing/v1/billingPolicies',
-    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } },
+    token,
+    { timeoutMs: 20_000, maxRows: 1_000 },
   );
-  if (!resp.ok) {
-    throw new Error(
-      `PPAC billingPolicies failed: ${resp.status} ${resp.statusText}`,
-    );
-  }
-  const body = (await resp.json()) as BillingPoliciesResponse;
-  return body.value.map((p): Capacity => {
+
+  return rows.map((p): Capacity => {
     const pct = p.creditLimit > 0
       ? parseFloat(((p.creditUsed / p.creditLimit) * 100).toFixed(1))
       : 0;

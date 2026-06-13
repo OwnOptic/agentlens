@@ -42,6 +42,22 @@ export class AzureOpenAINotConfiguredError extends Error {
   }
 }
 
+/** Sleep for `ms` milliseconds. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Parse Retry-After header; returns milliseconds or null. */
+function parseRetryAfter(headers: Headers): number | null {
+  const raw = headers.get('Retry-After');
+  if (!raw) return null;
+  const seconds = parseFloat(raw);
+  if (!isNaN(seconds)) return Math.ceil(seconds) * 1000;
+  const date = Date.parse(raw);
+  if (!isNaN(date)) return Math.max(0, date - Date.now());
+  return null;
+}
+
 /** Call Azure OpenAI chat completions. Returns the assistant message content. */
 export async function azureChat(
   messages: ChatMessage[],
@@ -51,21 +67,55 @@ export async function azureChat(
   if (!cfg) throw new AzureOpenAINotConfiguredError();
 
   const url = `${cfg.endpoint}/openai/deployments/${cfg.deployment}/chat/completions?api-version=${cfg.apiVersion}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'api-key': cfg.apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messages,
-      temperature: opts.temperature ?? 0.2,
-      max_tokens: opts.maxTokens ?? 800,
-    }),
-    cache: 'no-store',
-  });
+  const maxTokens = Math.min(opts.maxTokens ?? 800, 4096);
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Azure OpenAI returned ${res.status}: ${body.slice(0, 300)}`);
+  const MAX_ATTEMPTS = 3;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'api-key': cfg.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages,
+          temperature: opts.temperature ?? 0.2,
+          max_tokens: maxTokens,
+        }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (fetchErr) {
+      // Network / timeout error - rethrow without body
+      throw new Error(
+        `Azure OpenAI request failed: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`,
+      );
+    }
+
+    if (res.ok) {
+      const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      return json.choices?.[0]?.message?.content ?? '';
+    }
+
+    const isRetryable = res.status === 429 || res.status >= 500;
+
+    if (isRetryable && attempt < MAX_ATTEMPTS) {
+      // Log full body server-side only - never surface to caller
+      const body = await res.text().catch(() => '(unreadable)');
+      console.error(`[azureChat] attempt ${attempt} got ${res.status}, retrying. Body: ${body}`);
+
+      const retryAfterMs = parseRetryAfter(res.headers);
+      const backoffMs = retryAfterMs ?? Math.min(1000 * 2 ** (attempt - 1), 8000);
+      await sleep(backoffMs);
+      continue;
+    }
+
+    // Non-retryable or final attempt: log full body server-side, throw sanitized error
+    const body = await res.text().catch(() => '(unreadable)');
+    console.error(`[azureChat] Azure OpenAI returned ${res.status}. Body: ${body}`);
+    throw new Error(`Azure OpenAI returned ${res.status}`);
   }
-  const json = await res.json();
-  return json.choices?.[0]?.message?.content ?? '';
+
+  // Should not be reached
+  throw new Error('Azure OpenAI returned 429');
 }
