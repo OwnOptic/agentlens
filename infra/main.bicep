@@ -59,12 +59,54 @@ param deployPostgres bool = false
 @secure()
 param pgAdminPassword string = ''
 
+@description('Deploy an Application Insights component for observability. Set false to skip (e.g. for cost-sensitive dev deployments).')
+param deployAppInsights bool = true
+
+@description('Object ID of the Entra principal to add as Postgres AAD admin (e.g. the webapp managed identity principal ID). Leave empty to skip.')
+param pgAadAdminObjectId string = ''
+
+@description('Display name for the Postgres AAD admin principal. Must match the Entra display name exactly.')
+param pgAadAdminName string = 'agentlens-webapp'
+
 // ---------------------------------------------------------------------------
 // Deployment order is LINEAR (no cycles):
-//   1. kv      - Key Vault (depends on nothing)
-//   2. webApp  - Web App + managed identity (depends on kv.keyVaultUri)
-//   3. kvRole  - grants the identity access to the vault (depends on kv + webApp)
+//   1. kv             - Key Vault (depends on nothing)
+//   2. appInsights    - Application Insights + Log Analytics workspace (optional, depends on nothing)
+//   3. webApp         - Web App + managed identity (depends on kv.keyVaultUri + appInsights connection string)
+//   4. kvRole         - grants the identity access to the vault (depends on kv + webApp)
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Log Analytics Workspace (backing store for App Insights workspace-based component)
+// ---------------------------------------------------------------------------
+
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (deployAppInsights) {
+  name: 'log-${baseName}'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Application Insights (workspace-based, classic is deprecated)
+// ---------------------------------------------------------------------------
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = if (deployAppInsights) {
+  name: 'appi-${baseName}'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    // Workspace-based component: data stored in Log Analytics (no classic ingestion key)
+    WorkspaceResourceId: deployAppInsights ? logAnalyticsWorkspace.id : ''
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
+  }
+}
 
 module kv 'modules/keyvault.bicep' = {
   name: 'kv-deploy'
@@ -89,6 +131,10 @@ module webApp 'modules/webapp.bicep' = {
     azureOpenAiDeployment: azureOpenAiDeployment
     azureOpenAiApiVersion: azureOpenAiApiVersion
     deployPostgres: deployPostgres
+    // Pass connection string when App Insights is deployed; empty string = disabled.
+    // The null-coalescing fallback (appInsights?.properties.ConnectionString ?? '')
+    // avoids Bicep BCP318 when deployAppInsights=false and appInsights is null.
+    appInsightsConnectionString: appInsights.?properties.ConnectionString ?? ''
   }
 }
 
@@ -108,6 +154,8 @@ module postgres 'modules/postgres.bicep' = {
     baseName: baseName
     deployPostgres: deployPostgres
     pgAdminPassword: pgAdminPassword
+    pgAadAdminObjectId: pgAadAdminObjectId
+    pgAadAdminName: pgAadAdminName
   }
 }
 
@@ -135,3 +183,9 @@ output databaseUrlHint string = postgres.outputs.databaseUrlHint
 
 @description('PostgreSQL server FQDN (empty when deployPostgres=false)')
 output pgServerFqdn string = postgres.outputs.pgServerFqdn
+
+@description('Application Insights resource name (empty when deployAppInsights=false)')
+output appInsightsName string = deployAppInsights ? appInsights.name : ''
+
+@description('Log Analytics workspace resource name (empty when deployAppInsights=false)')
+output logAnalyticsWorkspaceName string = deployAppInsights ? logAnalyticsWorkspace.name : ''

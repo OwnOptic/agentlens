@@ -63,6 +63,18 @@ export interface DlpRecommendation {
     title: string;
     detail: string;
   }[];
+
+  /**
+   * T-306: ISO-8601 date when this recommendation was last reviewed and
+   * verified against the current Power Platform connector catalog.
+   */
+  lastVerifiedDate?: string;
+
+  /**
+   * T-306: Version string of the Power Platform connector catalog used when
+   * this recommendation was last verified (e.g. "2026-06-13").
+   */
+  connectorCatalogVersion?: string;
 }
 
 // ---------------------------------------------------------------------------

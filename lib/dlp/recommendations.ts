@@ -25,6 +25,35 @@ const MS_CORE_BUSINESS = [
   { name: 'Approvals', classification: 'business' as const, reason: 'Native Teams/Flow approval - keeps workflows within tenant.' },
 ];
 
+/**
+ * T-306: High-risk enterprise connectors - blocked in 'default' and 'production'
+ * archetypes. These connectors carry significant data-exfiltration or compliance
+ * risk when used without an explicit architectural review and DLP exception.
+ * lastVerifiedDate applies to the recommendation record, not this sub-list.
+ */
+const HIGH_RISK_ENTERPRISE_BLOCKED = [
+  {
+    name: 'Salesforce',
+    classification: 'blocked' as const,
+    reason: 'CRM platform with broad data access (contacts, opportunities, accounts). Blocked by default; require explicit DLP exception with data-flow review and owner sign-off before enabling.',
+  },
+  {
+    name: 'ServiceNow',
+    classification: 'blocked' as const,
+    reason: 'ITSM platform with access to incidents, CMDB, and service catalog. Blocked by default; data flowing to ServiceNow from agents must be scoped and approved to prevent accidental ticket injection or data leakage.',
+  },
+  {
+    name: 'SAP ERP',
+    classification: 'blocked' as const,
+    reason: 'Core ERP system (finance, HR, procurement). Blocked by default; any integration must go through a dedicated middleware layer with field-level data mapping reviewed by the ERP team.',
+  },
+  {
+    name: 'SQL Server',
+    classification: 'blocked' as const,
+    reason: 'Generic SQL Server connector can reach any on-premises or cloud database. Blocked by default; require a named data source review (schema, row-level security) before enabling for a specific agent.',
+  },
+];
+
 /** Consumer / social connectors - blocked in all hardened archetypes */
 const CONSUMER_SOCIAL_BLOCKED = [
   { name: 'WhatsApp', classification: 'blocked' as const, reason: 'Consumer messaging app - no enterprise data-residency guarantees.' },
@@ -63,11 +92,14 @@ export const DLP_RECOMMENDATIONS: DlpRecommendation[] = [
     summary:
       'The maker landing zone: every licensed user in the tenant can create here. Lock down hard with Microsoft-core-only Business connectors and block all consumer/social/HTTP. Violations surface at runtime as AppForbidden, not at install.',
     strategy:
-      'Strict allowlist - Business tier: Microsoft core only. All consumer, social, generic HTTP, and unauthenticated channels: Blocked. Pair with the tenant disableShareWithEveryone lever and consider Managed Environment to force per-environment routing.',
+      'Strict allowlist - Business tier: Microsoft core only. All consumer, social, generic HTTP, unauthenticated channels, and high-risk enterprise connectors: Blocked. Pair with the tenant disableShareWithEveryone lever and consider Managed Environment to force per-environment routing.',
     connectors: [
       ...MS_CORE_BUSINESS,
       ...CONSUMER_SOCIAL_BLOCKED,
+      ...HIGH_RISK_ENTERPRISE_BLOCKED,
     ],
+    lastVerifiedDate: '2026-06-13',
+    connectorCatalogVersion: '2026-06-13',
     gotchas: [
       {
         title: 'DLP violations surface at RUNTIME, not at install',
@@ -180,7 +212,7 @@ export const DLP_RECOMMENDATIONS: DlpRecommendation[] = [
     summary:
       'Every connector exception must be documented and approved. HTTP is blocked by default but HTTP with Microsoft Entra ID (preauthorized) is allowed for governed first-party admin APIs only - blocking it breaks governance tooling (Copilot Studio Kit and PowerShield both call api.bap.microsoft.com and api.flow.microsoft.com).',
     strategy:
-      'Strict allowlist - Business: Microsoft core + HTTP with Entra ID (scoped to first-party admin APIs). All other HTTP, consumer, and social: Blocked. Every exception is documented in the policy changelog with business owner and ticket reference.',
+      'Strict allowlist - Business: Microsoft core + HTTP with Entra ID (scoped to first-party admin APIs). All other HTTP, consumer, social, and high-risk enterprise connectors: Blocked. Every exception is documented in the policy changelog with business owner and ticket reference.',
     connectors: [
       ...MS_CORE_BUSINESS,
       {
@@ -193,9 +225,12 @@ export const DLP_RECOMMENDATIONS: DlpRecommendation[] = [
       { name: 'Azure Blob Storage', classification: 'business' as const, reason: 'Document processing pipelines - approved with data-residency verified in corporate subscription.' },
       { name: 'Azure Key Vault', classification: 'business' as const, reason: 'Secret management - mandatory for any production flow handling credentials.' },
       ...CONSUMER_SOCIAL_BLOCKED,
+      ...HIGH_RISK_ENTERPRISE_BLOCKED,
       { name: 'HTTP', classification: 'blocked' as const, reason: 'Generic HTTP is blocked in production; use HTTP with Entra ID for first-party APIs, or a dedicated connector.' },
       { name: 'HTTP Webhook', classification: 'blocked' as const, reason: 'Arbitrary outbound webhooks are blocked in production - all integrations must use approved connectors.' },
     ],
+    lastVerifiedDate: '2026-06-13',
+    connectorCatalogVersion: '2026-06-13',
     gotchas: [
       {
         title: 'Blocking HTTP with Entra ID breaks governance tooling',

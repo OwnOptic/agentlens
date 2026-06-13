@@ -186,12 +186,12 @@ function evalEnvOverage(
   out: Alert[],
 ): void {
   if (!cap.overage) return;
-  const key = alertKey(cap.envId, null, 'budget_breach');
+  const key = alertKey(cap.envId, null, 'env_overage');
   if (!seen.has(key)) {
     seen.add(key);
     out.push(
       buildAlert(
-        'budget_breach',
+        'env_overage',
         'critical',
         cap.envId,
         null,
@@ -215,12 +215,12 @@ function evalHighConsumption(
   const bbKey = alertKey(metric.envId, metric.botId, 'budget_breach');
   if (seen.has(bbKey)) return;
 
-  const hcKey = `${metric.envId}::${metric.botId}::high_consumption`;
+  const hcKey = alertKey(metric.envId, metric.botId, 'high_consumption');
   if (!seen.has(hcKey)) {
     seen.add(hcKey);
     out.push(
       buildAlert(
-        'volume_spike', // maps to volume_spike type; no dedicated AlertType for high_consumption
+        'high_consumption',
         'warning',
         metric.envId,
         metric.botId,
@@ -357,7 +357,7 @@ function evalOrphanIdle(
  * @param input.agents       - Full agent inventory
  * @param input.environments - Environment list (needed for new_default_env_agent)
  * @param input.capacity     - Capacity rows (needed for env_overage)
- * @param input.existingAlertKeys - Already-open alert fingerprints to dedupe
+ * @param input.existingAlertKeys - Already-open alert fingerprints to dedupe (T-304)
  *
  * @returns Deduplicated alerts sorted by severity (critical first)
  */
@@ -367,8 +367,11 @@ export function evaluateAlerts(
   agents: Agent[],
   environments: Environment[] = [],
   capacity: Capacity[] = [],
+  existingAlertKeys?: Set<string>,
 ): Alert[] {
-  const seen = new Set<string>();
+  // T-304: seed the seen set from already-open alert keys so re-evaluation
+  // does not re-fire alerts that are already open / acknowledged.
+  const seen = new Set<string>(existingAlertKeys ?? []);
   const out: Alert[] = [];
 
   // Per-metric rules

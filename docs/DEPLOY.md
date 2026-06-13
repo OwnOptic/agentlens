@@ -107,6 +107,12 @@ For client tenant deployments with Azure PostgreSQL (see D-021 below), add:
   --parameter pgAdminPassword=<secure-password>
 ```
 
+To skip Application Insights (cost-sensitive dev deployments):
+
+```bash
+  --parameter deployAppInsights=false
+```
+
 `azd up` will:
 1. Create a resource group named `rg-agentlens-prod` (or prompt you for a name)
 2. Deploy via `infra/main.bicep`:
@@ -114,9 +120,26 @@ For client tenant deployments with Azure PostgreSQL (see D-021 below), add:
    - Web App with Node 20 LTS and system-assigned managed identity
    - Azure Key Vault (RBAC mode, purge protection enabled)
    - Role assignment: Key Vault Secrets User -> webapp identity
+   - Application Insights + Log Analytics workspace (default: enabled; skip with `deployAppInsights=false`)
    - Optionally: Azure PostgreSQL Flexible Server B1ms
 3. Build the Next.js app (`npm run build`, standalone output)
-4. Deploy the standalone bundle to App Service
+4. Copy static assets into the standalone bundle (cross-platform Node script - works on Windows and Linux)
+5. Deploy the standalone bundle to App Service
+
+### Health check
+
+The webapp is configured with a health check path of `/api/health`. App Service polls this endpoint every minute. If it returns non-2xx for 10 consecutive minutes, App Service automatically restarts the instance. Implement `app/api/health/route.ts` to return `{ status: 'ok' }` with HTTP 200.
+
+### Application Insights
+
+When `deployAppInsights=true` (the default), a workspace-based Application Insights component and a Log Analytics workspace are deployed. The webapp receives the connection string as the `APPLICATIONINSIGHTS_CONNECTION_STRING` app setting. Install the SDK in the app:
+
+```bash
+npm install @microsoft/applicationinsights-web
+# or for server-side: applicationinsights
+```
+
+The App Insights ingestion domain (`*.azure.com`) is already in the `connect-src` CSP directive - no further changes needed.
 
 Expected output:
 
@@ -284,12 +307,11 @@ az role assignment create \
 
 **Cause**: Next.js standalone output requires static files to be copied alongside `server.js`.
 
-**Fix**: The `azure.yaml` postdeploy hook copies `.next/static` and `public` into `.next/standalone`. If deploying without `azd`, run manually:
+**Fix**: The `azure.yaml` postbuild hook calls `npm run postbuild:standalone`, which runs `scripts/copy-standalone.js` (a cross-platform Node script using `fs.cpSync`). This works on Windows and Linux - no `sh`/`cp` dependency. If deploying without `azd`, run manually:
 
 ```bash
 npm run build
-cp -r .next/static .next/standalone/.next/static
-cp -r public .next/standalone/public
+npm run postbuild:standalone
 # Then zip and deploy .next/standalone/
 ```
 

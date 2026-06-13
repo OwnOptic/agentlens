@@ -42,20 +42,6 @@ type Tab = 'setup' | 'config' | 'firstrun';
 
 type SecretSource = 'keyvault' | 'env' | 'missing';
 
-interface ConfigPayload {
-  tenantId: string | null;
-  orgUrls: string | null;
-  keyVaultUri: string | null;
-  authMode: string;
-  nextAuthUrl: string | null;
-  hasTeamsWebhook: boolean;
-  hasCronSecret: boolean;
-}
-
-interface SourceMapPayload {
-  sourceMap: Record<string, SecretSource>;
-}
-
 // ---------------------------------------------------------------------------
 // Status -> Badge variant + icon
 // ---------------------------------------------------------------------------
@@ -289,21 +275,32 @@ function SecretSourceRow({ name, source }: { name: string; source: SecretSource 
 function ConfigSection({ status }: { status: SetupStatus | null }) {
   const [sourceMap, setSourceMap] = useState<Record<string, SecretSource> | null>(null);
   const [smLoading, setSmLoading] = useState(false);
+  const [smError, setSmError] = useState<string | null>(null);
 
+  // Fetch the real per-secret source map from the server on mount.
+  // GET /api/config/save returns { sourceMap: Record<string, SecretSource> }
+  // with the true resolution source for each secret (keyvault | env | missing).
+  // Values are never included - only the source label.
   useEffect(() => {
-    if (!sourceMap) {
-      setSmLoading(true);
-      fetch('/api/setup-status')
-        .then((r) => r.json() as Promise<SetupStatus>)
-        .then(() => {
-          // Source map is served via the same endpoint; we derive it from
-          // an additional dedicated endpoint. For now, show what we have
-          // from the probe results: keyvault check tells us whether KV is live.
-          setSmLoading(false);
-        })
-        .catch(() => setSmLoading(false));
-    }
-  }, [sourceMap]);
+    setSmLoading(true);
+    setSmError(null);
+    fetch('/api/config/save')
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<{ sourceMap: Record<string, SecretSource> }>;
+      })
+      .then((data) => {
+        setSourceMap(data.sourceMap);
+        setSmLoading(false);
+      })
+      .catch((err: unknown) => {
+        setSmError(err instanceof Error ? err.message : String(err));
+        setSmLoading(false);
+      });
+  // Run once on mount; no deps needed - the source map does not change during
+  // a page session and the setup-status refresh does not affect it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Derive config values from environment (server-rendered props not available
   // in 'use client' pages - show placeholders for values not in probes)
@@ -381,42 +378,22 @@ function ConfigSection({ status }: { status: SetupStatus | null }) {
         </div>
         {smLoading ? (
           <p className="px-4 py-4 text-xs text-slate-500">Loading secret sources...</p>
-        ) : status ? (
+        ) : smError ? (
+          <p className="px-4 py-4 text-xs text-red-400">
+            Could not load secret sources: {smError}
+          </p>
+        ) : sourceMap ? (
           <div>
-            {/* Derive from the KV probe whether KV is live */}
-            {[
-              'AZURE-CLIENT-SECRET',
-              'AZURE-OPENAI-API-KEY',
-              'SUPABASE-SERVICE-KEY',
-              'CRON-SECRET',
-              'TEAMS-WEBHOOK-URL',
-              'AUTH-SECRET',
-              'WEBAPP-CLIENT-SECRET',
-            ].map((name) => {
-              const kvOk = kvCheck?.status === 'ok';
-              // We don't have per-secret source info client-side without a
-              // dedicated endpoint; show a note pointing to the real source.
-              const source: SecretSource = kvOk ? 'keyvault' : 'env';
-              return (
-                <SecretSourceRow
-                  key={name}
-                  name={name}
-                  source={
-                    sourceMap?.[name] ??
-                    // Conservative default: if KV not connected, mark as env
-                    // (actual missing state would only be known server-side)
-                    source
-                  }
-                />
-              );
-            })}
-            <p className="border-t border-slate-800/60 px-4 py-2 text-xs text-slate-600">
-              Source shown is inferred from probe results. For exact per-secret resolution,
-              check server logs or run the probe API directly: <code className="text-slate-500">GET /api/setup-status</code>
-            </p>
+            {(Object.keys(sourceMap) as string[]).map((name) => (
+              <SecretSourceRow
+                key={name}
+                name={name}
+                source={sourceMap[name]}
+              />
+            ))}
           </div>
         ) : (
-          <p className="px-4 py-4 text-xs text-slate-500">Run checks first to see secret sources.</p>
+          <p className="px-4 py-4 text-xs text-slate-500">No secret source data available.</p>
         )}
       </Card>
     </div>
@@ -566,13 +543,6 @@ export default function SettingsPage() {
   const totalChecks = status?.checks.length ?? 0;
   const notOkCount = status?.checks.filter((c) => c.status !== 'ok').length ?? 0;
   const showFirstRun = totalChecks > 0 && notOkCount > totalChecks / 2;
-
-  // Auto-switch to first-run tab if most checks fail on first load
-  useEffect(() => {
-    if (showFirstRun && tab === 'setup') {
-      // Don't auto-redirect; just let the guide be visible via tab
-    }
-  }, [showFirstRun, tab]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

@@ -14,8 +14,6 @@
  * Idempotent: running twice is safe (checks for existing app-user before adding).
  */
 
-import type { Environment } from '@/lib/types';
-
 interface ProvisionOptions {
   tenantId: string;
   clientId: string;

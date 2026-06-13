@@ -27,12 +27,11 @@ services:
     dist: .next/standalone
     # App Service deployment settings
     hooks:
-      postdeploy:
-        # Copy static assets into the standalone output (required for standalone mode)
-        shell: sh
-        run: |
-          cp -r .next/static .next/standalone/.next/static
-          cp -r public .next/standalone/public
+      postbuild:
+        # Copy static assets into the standalone output (cross-platform, replaces sh/cp -r).
+        # Uses a Node script so it works on Windows (azd CI) and Linux/macOS alike.
+        shell: pwsh
+        run: npm run postbuild:standalone
 
 pipeline:
   provider: github

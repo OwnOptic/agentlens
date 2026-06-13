@@ -9,12 +9,25 @@ import React, { useState, useCallback } from 'react';
  * Walks users through:
  * 1. Tenant ID (Entra tenant)
  * 2. Client ID (app registration)
- * 3. Teams webhook URL (for alerts, optional)
- * 4. Custom thresholds (budget, escalation)
+ * 3. Custom thresholds (budget, escalation)
  *
- * Stores settings in Supabase or browser localStorage if not configured.
- * Validates each step before allowing progression.
+ * On the final step the wizard:
+ *   - Calls POST /api/config/verify to confirm the credentials can obtain a
+ *     token server-side (no secret is sent from the browser).
+ *   - If verification passes, calls POST /api/config/save which validates the
+ *     non-secret identifiers and returns a ready-to-copy .env block.
+ *   - Renders the returned .env block as a code block with a Copy button,
+ *     instructing the operator to paste values into .env.local (dev) or
+ *     Azure Key Vault / App Service settings (production).
+ *
+ * NEVER persists config or secrets to localStorage or any client-side store.
+ * Secrets belong in Azure Key Vault (prod) or .env.local (dev only, not
+ * committed to source control).
  */
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface SetupStep {
   key: string;
@@ -37,10 +50,13 @@ interface SetupField {
 interface SetupState {
   tenantId: string;
   clientId: string;
-  teamsWebhookUrl: string;
   budgetThreshold: number;
   escalationThreshold: number;
 }
+
+// ---------------------------------------------------------------------------
+// Step definitions
+// ---------------------------------------------------------------------------
 
 const SETUP_STEPS: SetupStep[] = [
   {
@@ -76,22 +92,6 @@ const SETUP_STEPS: SetupStep[] = [
     ],
   },
   {
-    key: 'alerts',
-    label: 'Alert Notifications',
-    description: 'Optional: Configure where alerts are sent',
-    fields: [
-      {
-        name: 'teamsWebhookUrl',
-        label: 'Teams Webhook URL',
-        type: 'url',
-        placeholder: 'https://outlook.webhook.office.com/webhookb2/...',
-        required: false,
-        help: 'Create a webhook connector in Teams to receive alerts (optional)',
-      },
-    ],
-    optional: true,
-  },
-  {
     key: 'thresholds',
     label: 'Governance Thresholds',
     description: 'Set alert triggers for cost and usage',
@@ -116,110 +116,130 @@ const SETUP_STEPS: SetupStep[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// CopyButton helper
+// ---------------------------------------------------------------------------
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="rounded px-2 py-1 text-xs bg-slate-700 text-slate-300
+                 hover:bg-slate-600 transition-colors"
+    >
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export default function SetupWizard() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [state, setState] = useState<SetupState>({
     tenantId: '',
     clientId: '',
-    teamsWebhookUrl: '',
     budgetThreshold: 5000,
     escalationThreshold: 25,
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verified, setVerified] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Result state after the final submit
+  const [envBlock, setEnvBlock] = useState<string | null>(null);
 
   const currentStep = SETUP_STEPS[currentStepIndex];
+  const isLastStep = currentStepIndex === SETUP_STEPS.length - 1;
 
-  // Validate a single field
+  // ---------------------------------------------------------------------------
+  // Validation
+  // ---------------------------------------------------------------------------
+
   const validateField = useCallback((field: SetupField, value: string): string => {
-    if (field.required && !value) {
+    if (field.required && !value.trim()) {
       return `${field.label} is required`;
     }
-
     if (field.pattern && value && !new RegExp(field.pattern).test(value)) {
       return `${field.label} format is invalid`;
     }
-
     if (field.type === 'email' && value && !value.includes('@')) {
       return 'Please enter a valid email address';
     }
-
     if (field.type === 'url' && value && !value.startsWith('http')) {
       return 'Please enter a valid URL';
     }
-
     if (field.type === 'number' && value && isNaN(parseFloat(value))) {
       return `${field.label} must be a number`;
     }
-
     return '';
   }, []);
 
-  // Handle field value change
-  const handleFieldChange = useCallback(
-    (fieldName: string, value: string) => {
-      setState((prev) => ({
-        ...prev,
-        [fieldName]: fieldName.includes('Threshold') ? parseFloat(value) || 0 : value,
-      }));
-
-      // Clear error for this field
-      setFieldErrors((prev) => {
-        const next = { ...prev };
-        delete next[fieldName];
-        return next;
-      });
-    },
-    []
-  );
-
-  // Validate current step
   const validateCurrentStep = useCallback((): boolean => {
     const errors: Record<string, string> = {};
-
     for (const field of currentStep.fields) {
-      const value = state[field.name as keyof SetupState]?.toString() || '';
+      const value = String(state[field.name as keyof SetupState] ?? '');
       const error = validateField(field, value);
-      if (error) {
-        errors[field.name] = error;
-      }
+      if (error) errors[field.name] = error;
     }
-
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }, [currentStep, state, validateField]);
 
-  // Handle next button
-  const handleNext = useCallback(() => {
-    if (!validateCurrentStep()) {
-      return;
-    }
+  // ---------------------------------------------------------------------------
+  // Field change
+  // ---------------------------------------------------------------------------
 
-    if (currentStepIndex < SETUP_STEPS.length - 1) {
-      setCurrentStepIndex(currentStepIndex + 1);
+  const handleFieldChange = useCallback((fieldName: string, value: string) => {
+    setState((prev) => ({
+      ...prev,
+      [fieldName]: fieldName.includes('Threshold') ? parseFloat(value) || 0 : value,
+    }));
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[fieldName];
+      delete next['_submit'];
+      return next;
+    });
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  const handlePrev = useCallback(() => {
+    if (currentStepIndex > 0) setCurrentStepIndex((i) => i - 1);
+  }, [currentStepIndex]);
+
+  const handleNext = useCallback(() => {
+    if (validateCurrentStep() && currentStepIndex < SETUP_STEPS.length - 1) {
+      setCurrentStepIndex((i) => i + 1);
     }
   }, [currentStepIndex, validateCurrentStep]);
 
-  // Handle previous button
-  const handlePrev = useCallback(() => {
-    if (currentStepIndex > 0) {
-      setCurrentStepIndex(currentStepIndex - 1);
-    }
-  }, [currentStepIndex]);
+  // ---------------------------------------------------------------------------
+  // Final submit: verify then save
+  // ---------------------------------------------------------------------------
 
-  // Handle verify connection
-  const handleVerify = useCallback(async () => {
-    if (!validateCurrentStep()) {
-      return;
-    }
-
-    setIsVerifying(true);
+  const handleSubmit = useCallback(async () => {
+    if (!validateCurrentStep()) return;
+    setIsSubmitting(true);
+    setFieldErrors({});
 
     try {
-      // Call API to verify the connection
-      const response = await fetch('/api/config/verify', {
+      // Step 1: verify credentials server-side
+      const verifyRes = await fetch('/api/config/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -228,29 +248,109 @@ export default function SetupWizard() {
         }),
       });
 
-      if (response.ok) {
-        setVerified(true);
-
-        // Save settings to storage
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('agentlens-config', JSON.stringify(state));
-        }
-      } else {
-        const error = await response.json();
-        setFieldErrors({
-          _submit: error.error || 'Verification failed. Check your credentials.',
-        });
+      if (!verifyRes.ok) {
+        setFieldErrors({ _submit: `Verification request failed (HTTP ${verifyRes.status})` });
+        return;
       }
-    } catch (error) {
-      setFieldErrors({
-        _submit: `Error: ${(error as Error).message}`,
+
+      const verifyData = (await verifyRes.json()) as { ok: boolean; error?: string };
+      if (!verifyData.ok) {
+        setFieldErrors({ _submit: verifyData.error ?? 'Verification failed. Check credentials.' });
+        return;
+      }
+
+      // Step 2: get the .env block for copy-paste
+      const saveRes = await fetch('/api/config/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: state.tenantId,
+          clientId: state.clientId,
+          budgetThreshold: state.budgetThreshold,
+          escalationThreshold: state.escalationThreshold,
+        }),
       });
+
+      if (!saveRes.ok) {
+        setFieldErrors({ _submit: `Save request failed (HTTP ${saveRes.status})` });
+        return;
+      }
+
+      const saveData = (await saveRes.json()) as { ok: boolean; envBlock?: string; error?: string };
+      if (!saveData.ok) {
+        setFieldErrors({ _submit: saveData.error ?? 'Could not generate config block.' });
+        return;
+      }
+
+      setEnvBlock(saveData.envBlock ?? '');
+    } catch (err) {
+      setFieldErrors({ _submit: err instanceof Error ? err.message : String(err) });
     } finally {
-      setIsVerifying(false);
+      setIsSubmitting(false);
     }
   }, [state, validateCurrentStep]);
 
-  const isLastStep = currentStepIndex === SETUP_STEPS.length - 1;
+  // ---------------------------------------------------------------------------
+  // Render - envBlock result screen
+  // ---------------------------------------------------------------------------
+
+  if (envBlock !== null) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Configuration ready</h1>
+          <p className="mt-2 text-slate-400">
+            Verification passed. Copy the block below into your configuration store.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-emerald-800/50 bg-emerald-900/10 px-4 py-3">
+          <p className="text-sm font-medium text-emerald-300">Credentials verified successfully</p>
+          <p className="mt-1 text-xs text-slate-400">
+            The server confirmed it can acquire an ARM token with the configured service principal.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-300">
+              .env.local (dev) / App Service env vars (prod)
+            </p>
+            <CopyButton text={envBlock} />
+          </div>
+          <pre className="overflow-x-auto rounded-lg border border-slate-700 bg-slate-950 p-4 text-xs text-emerald-300 leading-relaxed whitespace-pre">
+            {envBlock}
+          </pre>
+        </div>
+
+        <div className="rounded-md border border-amber-800/40 bg-amber-900/10 px-4 py-3 space-y-1">
+          <p className="text-sm font-semibold text-amber-300">Security notice</p>
+          <p className="text-xs text-slate-400">
+            This block contains only non-secret identifiers. Secrets
+            (AZURE_CLIENT_SECRET, API keys, webhook URLs) were NOT persisted by
+            this wizard - set them directly in Azure Key Vault (production) or
+            .env.local (local dev, never commit to source control).
+          </p>
+        </div>
+
+        <button
+          onClick={() => {
+            setEnvBlock(null);
+            setCurrentStepIndex(0);
+            setState({ tenantId: '', clientId: '', budgetThreshold: 5000, escalationThreshold: 25 });
+          }}
+          className="rounded-md px-4 py-2 text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"
+        >
+          Start over
+        </button>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render - wizard steps
+  // ---------------------------------------------------------------------------
+
   const allFieldsValid = !Object.keys(fieldErrors).some((k) => k !== '_submit');
 
   return (
@@ -259,11 +359,11 @@ export default function SetupWizard() {
       <div>
         <h1 className="text-3xl font-bold text-white">Setup Wizard</h1>
         <p className="mt-2 text-slate-400">
-          Configure AgentLens to connect to your Entra tenant and Power Platform estate
+          Configure AgentLens to connect to your Entra tenant and Power Platform estate.
         </p>
       </div>
 
-      {/* Progress indicator */}
+      {/* Progress */}
       <div className="space-y-4">
         <div className="flex justify-between text-sm">
           <span className="text-slate-400">
@@ -274,9 +374,7 @@ export default function SetupWizard() {
         <div className="h-2 w-full rounded-full bg-slate-800">
           <div
             className="h-2 rounded-full bg-emerald-500 transition-all duration-300"
-            style={{
-              width: `${((currentStepIndex + 1) / SETUP_STEPS.length) * 100}%`,
-            }}
+            style={{ width: `${((currentStepIndex + 1) / SETUP_STEPS.length) * 100}%` }}
           />
         </div>
       </div>
@@ -288,37 +386,31 @@ export default function SetupWizard() {
           <p className="mt-1 text-slate-400">{currentStep.description}</p>
         </div>
 
-        {/* Form fields */}
         <div className="space-y-4">
           {currentStep.fields.map((field) => (
             <div key={field.name}>
               <label className="block text-sm font-medium text-slate-300">
                 {field.label}
-                {field.required && <span className="text-red-400">*</span>}
+                {field.required && <span className="ml-0.5 text-red-400">*</span>}
               </label>
               <input
                 type={field.type}
                 placeholder={field.placeholder}
-                value={state[field.name as keyof SetupState] || ''}
+                value={String(state[field.name as keyof SetupState] ?? '')}
                 onChange={(e) => handleFieldChange(field.name, e.target.value)}
                 className={[
                   'mt-1 w-full rounded-md bg-slate-800 px-3 py-2 text-white',
-                  'border transition-colors placeholder-slate-500',
+                  'border transition-colors placeholder-slate-500 focus:outline-none focus:ring-1',
                   fieldErrors[field.name]
-                    ? 'border-red-500 focus:border-red-400'
-                    : 'border-slate-700 focus:border-emerald-500',
-                  'focus:outline-none focus:ring-1',
-                  fieldErrors[field.name]
-                    ? 'focus:ring-red-500'
-                    : 'focus:ring-emerald-500',
+                    ? 'border-red-500 focus:border-red-400 focus:ring-red-500'
+                    : 'border-slate-700 focus:border-emerald-500 focus:ring-emerald-500',
                 ].join(' ')}
               />
-              {fieldErrors[field.name] && (
+              {fieldErrors[field.name] ? (
                 <p className="mt-1 text-sm text-red-400">{fieldErrors[field.name]}</p>
-              )}
-              {field.help && !fieldErrors[field.name] && (
+              ) : field.help ? (
                 <p className="mt-1 text-xs text-slate-500">{field.help}</p>
-              )}
+              ) : null}
             </div>
           ))}
         </div>
@@ -329,16 +421,9 @@ export default function SetupWizard() {
             <p className="text-sm text-red-300">{fieldErrors._submit}</p>
           </div>
         )}
-
-        {/* Success message */}
-        {verified && (
-          <div className="rounded-md border border-emerald-900 bg-emerald-900/20 px-4 py-3">
-            <p className="text-sm text-emerald-300">✓ Configuration verified and saved!</p>
-          </div>
-        )}
       </div>
 
-      {/* Navigation buttons */}
+      {/* Navigation */}
       <div className="flex items-center justify-between">
         <button
           onClick={handlePrev}
@@ -359,16 +444,16 @@ export default function SetupWizard() {
 
         {isLastStep ? (
           <button
-            onClick={handleVerify}
-            disabled={isVerifying || !allFieldsValid}
+            onClick={() => void handleSubmit()}
+            disabled={isSubmitting || !allFieldsValid}
             className={[
               'rounded-md px-4 py-2 font-medium transition-colors',
-              isVerifying || !allFieldsValid
+              isSubmitting || !allFieldsValid
                 ? 'cursor-not-allowed bg-emerald-900/50 text-emerald-600'
                 : 'bg-emerald-600 text-white hover:bg-emerald-700',
             ].join(' ')}
           >
-            {isVerifying ? 'Verifying...' : 'Verify & Save'}
+            {isSubmitting ? 'Verifying...' : 'Verify & generate config'}
           </button>
         ) : (
           <button
@@ -386,7 +471,7 @@ export default function SetupWizard() {
         )}
       </div>
 
-      {/* Info box */}
+      {/* Help box */}
       <div className="rounded-md border border-slate-800 bg-slate-900/50 px-4 py-3">
         <h3 className="text-sm font-medium text-slate-300">Need help?</h3>
         <ul className="mt-2 space-y-1 text-xs text-slate-400">
@@ -412,7 +497,7 @@ export default function SetupWizard() {
             >
               Azure Portal
             </a>
-            {' > '}Entra ID {' > '}App registrations
+            {' > '}Entra ID{' > '}App registrations
           </li>
           <li>
             - See{' '}

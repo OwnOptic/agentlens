@@ -57,6 +57,8 @@ const TYPE_LABEL: Record<AlertType, string> = {
   new_default_env_agent: 'Default Env Agent',
   model_meter_mismatch:  'Meter Mismatch',
   orphan_idle:           'Orphan / Idle',
+  env_overage:           'Env Credit Overage',
+  high_consumption:      'High Consumption',
 };
 
 function formatDate(iso: string): string {

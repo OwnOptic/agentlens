@@ -112,14 +112,25 @@ export function parsePolicy(yaml: string): ParsedPolicy {
   let name = '';
   let version = '1.0';
   const rules: PolicyRule[] = [];
+  let seenRulesKey = false;
 
   let i = 0;
 
   // Helper: extract value from "key: value" line
+  // Only strips surrounding quotes when the entire value is wrapped in a matching
+  // quote pair (e.g. version: "1.0" -> 1.0, name: 'foo' -> foo).
+  // Does NOT strip quotes that are embedded inside the value (condition strings).
   function extractValue(line: string): string {
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) return '';
-    return line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
+    const raw = line.slice(colonIdx + 1).trim();
+    if (
+      (raw.startsWith('"') && raw.endsWith('"')) ||
+      (raw.startsWith("'") && raw.endsWith("'"))
+    ) {
+      return raw.slice(1, -1);
+    }
+    return raw;
   }
 
   // Helper: get leading spaces count
@@ -141,6 +152,7 @@ export function parsePolicy(yaml: string): ParsedPolicy {
     } else if (trimmed.startsWith('version:')) {
       version = extractValue(trimmed);
     } else if (trimmed === 'rules:') {
+      seenRulesKey = true;
       i++;
       // Parse list of rules
       while (i < lines.length) {
@@ -163,12 +175,15 @@ export function parsePolicy(yaml: string): ParsedPolicy {
             const propLine = lines[i];
             const propTrimmed = propLine.trim();
 
+            // T-303c: blank lines and comments inside a rule block must NOT
+            // be treated as a dedent - skip them and continue parsing properties.
             if (!propTrimmed || propTrimmed.startsWith('#')) {
               i++;
               continue;
             }
 
             // Back to parent (another list item or dedented)
+            // Only check indent for non-blank lines (blank lines already skipped above)
             if (propTrimmed.startsWith('- id:') || indent(propLine) <= baseIndent) {
               break;
             }
@@ -210,6 +225,13 @@ export function parsePolicy(yaml: string): ParsedPolicy {
 
   if (!name) {
     throw new Error('Policy parse error: missing required field "name"');
+  }
+
+  // T-303d: explicitly reject policies that have no 'rules:' key.
+  // Without this check, a policy with no rules silently returns [] and passes
+  // every gate evaluation - a dangerous false-positive.
+  if (!seenRulesKey) {
+    throw new Error('Policy parse error: missing required field "rules" (no "rules:" key found)');
   }
 
   return { name, version, rules };

@@ -49,7 +49,12 @@ function detectAutonomous(agent: Agent, env: Environment): boolean {
   );
 }
 
-/** Maker credential: agent uses maker's personal OAuth token instead of a service principal. */
+/** Maker credential: agent uses maker's personal OAuth token instead of a service principal.
+ * T-304: only fires when authMode is explicitly 'user_delegated'.
+ * The previous (agent.lifecycle === 'poc' && agent.ownerEmail !== null) branch was a
+ * false-positive generator - a PoC agent with a known owner is not necessarily using
+ * a maker credential; it is just a low-maturity env. Dropped.
+ */
 function detectMakerCredential(agent: Agent): boolean {
   const ctx = buildEvalContext(agent, {
     id: agent.envId,
@@ -59,22 +64,22 @@ function detectMakerCredential(agent: Agent): boolean {
     region: '',
     orgUrl: '',
   });
-  // Heuristic: user-delegated auth in combo with low-maturity lifecycle
-  return (
-    ctx['agent.authMode'] === 'user_delegated' ||
-    (agent.lifecycle === 'poc' && agent.ownerEmail !== null)
-  );
+  // Only fires on confirmed user-delegated auth mode.
+  return ctx['agent.authMode'] === 'user_delegated';
 }
 
-/** HTTP action: agent calls external HTTP endpoints (potential data exfiltration). */
+/** HTTP action: agent calls external HTTP endpoints (potential data exfiltration).
+ * T-304: removed bare 'external' substring match to reduce false positives.
+ * The word 'external' is too generic (e.g. "External Communications Bot" does not
+ * necessarily use HTTP actions). Require 'http', 'api', or 'external api' explicitly.
+ */
 function detectHttpAction(agent: Agent): boolean {
   const name = agent.name.toLowerCase();
   return (
     name.includes('http') ||
     name.includes('external api') ||
     name.includes('api orchestrat') ||
-    name.includes('webhook') ||
-    name.includes('external')
+    name.includes('webhook')
   );
 }
 

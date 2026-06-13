@@ -234,7 +234,7 @@ async function probeAgent365(): Promise<SetupCheck> {
   if (!hasClientId) {
     return {
       key: 'data_agent365',
-      label: 'Agent 365 Graph probe',
+      label: 'Agent 365 licensing probe (Copilot admin catalog)',
       area: 'data',
       status: 'missing',
       detail: 'Skipped - service principal not configured.',
@@ -249,24 +249,47 @@ async function probeAgent365(): Promise<SetupCheck> {
       PROBE_TIMEOUT,
     );
 
-    // Probe the Agent 365 endpoint
+    if (!token) {
+      return {
+        key: 'data_agent365',
+        label: 'Agent 365 licensing probe (Copilot admin catalog)',
+        area: 'data',
+        status: 'error',
+        detail: 'Could not acquire a Graph token to perform the Agent 365 probe.',
+        fix: 'Check that AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_CLIENT_SECRET are configured.',
+      };
+    }
+
+    // Probe the Copilot admin packages catalog endpoint.
+    // This endpoint is gated behind Agent 365 (or M365 E5 with Copilot) licensing:
+    //   200 -> licensed, catalog is accessible
+    //   403 with "license_required" / "Forbidden" -> SP authenticated but tenant lacks A365
+    //   404 -> tenant exists but no Copilot admin catalog feature (also indicates no A365)
+    //
+    // NOTE: /solutions/virtualEvents (previous probe) is the Teams Virtual Events API
+    // and has nothing to do with Agent 365 - it returned false positives.
     const res = await withTimeout(
-      fetch('https://graph.microsoft.com/v1.0/solutions/virtualEvents', {
+      fetch('https://graph.microsoft.com/v1.0/admin/microsoft365Apps/installations', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       }),
       PROBE_TIMEOUT,
     );
 
-    if (res.status === 403) {
-      // Endpoint is real but the tenant does not have Agent 365 licensing
+    // 403 or 404 = authenticated but not licensed for this surface
+    if (res.status === 403 || res.status === 404) {
       return {
         key: 'data_agent365',
-        label: 'Agent 365 Graph probe',
+        label: 'Agent 365 licensing probe (Copilot admin catalog)',
         area: 'data',
         status: 'license_required',
-        detail: 'Endpoint is reachable but returned 403 - needs Agent 365 license.',
-        fix: 'Assign Agent 365 (or M365 E5) licenses to the service account in M365 admin center > Licenses.',
+        detail:
+          `Graph returned HTTP ${res.status} on the Copilot admin installations endpoint. ` +
+          'The service principal is authenticated but the tenant does not appear to have ' +
+          'Agent 365 (or an M365 E5 plan that includes Copilot agent security features).',
+        fix:
+          'Assign Agent 365 licenses in M365 admin center > Billing > Licenses, or verify ' +
+          'that the app registration has the Microsoft365Apps.Read.All API permission granted.',
       };
     }
 
@@ -274,26 +297,28 @@ async function probeAgent365(): Promise<SetupCheck> {
       const text = await res.text();
       return {
         key: 'data_agent365',
-        label: 'Agent 365 Graph probe',
+        label: 'Agent 365 licensing probe (Copilot admin catalog)',
         area: 'data',
         status: 'error',
-        detail: `Graph returned HTTP ${res.status}: ${text.slice(0, 200)}`,
-        fix: 'Check Graph API permissions: add AgentService.Read.All in Azure Portal > App registrations > API permissions.',
+        detail: `Copilot admin endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`,
+        fix:
+          'Grant Microsoft365Apps.Read.All (Application) in Azure Portal > App registrations > ' +
+          'API permissions, then re-run admin consent.',
       };
     }
 
     return {
       key: 'data_agent365',
-      label: 'Agent 365 Graph probe',
+      label: 'Agent 365 licensing probe (Copilot admin catalog)',
       area: 'data',
       status: 'ok',
-      detail: 'Agent 365 Graph endpoint reachable.',
+      detail: 'Copilot admin catalog endpoint accessible - Agent 365 licensing confirmed.',
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
       key: 'data_agent365',
-      label: 'Agent 365 Graph probe',
+      label: 'Agent 365 licensing probe (Copilot admin catalog)',
       area: 'data',
       status: 'error',
       detail: `Agent 365 probe failed: ${msg.slice(0, 200)}`,

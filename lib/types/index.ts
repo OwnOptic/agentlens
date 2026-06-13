@@ -42,6 +42,7 @@ export type LifecycleStage = 'poc' | 'pilot' | 'prod';
  * Agent
  * Represents a Copilot Studio agent in an environment.
  * v2 adds: lifecycle
+ * v3 adds: live governance signals (optional, non-breaking)
  */
 export interface Agent {
   envId: string;
@@ -56,6 +57,14 @@ export interface Agent {
   kind: AgentKind;
   /** v2: operational lifecycle stage */
   lifecycle?: LifecycleStage;
+  /** v3: live connector identifiers from Dataverse scan (e.g. ["http", "sharepoint"]) */
+  connectors?: string[];
+  /** v3: live auth mode from agent configuration (e.g. "anonymous", "user_delegated", "entra_id") */
+  authMode?: string;
+  /** v3: live channel identifiers from agent configuration (e.g. ["teams", "directline"]) */
+  channelIds?: string[];
+  /** v3: sharing scope from agent configuration (e.g. "tenant", "group", "owner") */
+  sharingScope?: string;
 }
 
 /**
@@ -98,7 +107,9 @@ export type AlertType =
   | 'volume_spike'
   | 'new_default_env_agent'
   | 'model_meter_mismatch'
-  | 'orphan_idle';
+  | 'orphan_idle'
+  | 'env_overage'
+  | 'high_consumption';
 
 /**
  * AlertSeverity

@@ -39,6 +39,9 @@ param azureOpenAiApiVersion string = '2024-08-01-preview'
 @description('When true, also wire DATABASE_URL as a Key Vault reference (secret DATABASE-URL)')
 param deployPostgres bool = false
 
+@description('Application Insights connection string. Empty string = App Insights disabled (no setting emitted).')
+param appInsightsConnectionString string = ''
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -89,6 +92,9 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       http20Enabled: true
+      // App Service health check: auto-heals hung instances when the endpoint
+      // returns non-2xx for 10 minutes. Route: app/api/health/route.ts
+      healthCheckPath: '/api/health'
       // Next.js standalone: serve from .next/standalone
       appCommandLine: 'node server.js'
       appSettings: concat([
@@ -179,6 +185,13 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
         {
           name: 'WEBSITE_RUN_FROM_PACKAGE'
           value: '1'
+        }
+      ],
+      // APPLICATIONINSIGHTS_CONNECTION_STRING only when App Insights is enabled
+      empty(appInsightsConnectionString) ? [] : [
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsightsConnectionString
         }
       ],
       // DATABASE_URL only when deploying Azure PostgreSQL (else Supabase is used)

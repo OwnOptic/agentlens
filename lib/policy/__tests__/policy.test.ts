@@ -118,11 +118,10 @@ rules:
     expect(parsed.rules.length).toBeGreaterThanOrEqual(2);
   });
 
-  // T-006/303: blank line inside a rule block still parses all properties
-  // SKIP until T-303 (Phase 3) fixes the hand-rolled YAML parser's blank-line
-  // handling. The parser currently treats a blank line inside a rule block as a
-  // dedent and truncates the value. Un-skip when T-303 lands.
-  it.skip('parses a rule block that contains a blank line between properties', () => {
+  // T-303c: blank line inside a rule block still parses all properties.
+  // Fixed: the parser already skips blank/comment lines in the inner rule loop,
+  // so properties after blank lines are correctly parsed.
+  it('parses a rule block that contains a blank line between properties', () => {
     const yaml = `---
 name: blank-line-gate
 version: "1.0"
@@ -142,13 +141,9 @@ rules:
     expect(policy.rules[0].condition).toBe('agent.state == "Active"');
   });
 
-  // T-006/303: a policy with no 'rules:' key - assert current evaluator behavior
-  // TODO: consider adding an explicit validation step in parsePolicy that
-  // returns a structured error when 'rules' is absent, rather than relying on
-  // downstream failures.
-  // SKIP until T-303 (Phase 3) adds explicit "no rules" validation to parsePolicy
-  // (today it silently returns an empty rules array, which would pass everything).
-  it.skip('throws or is reported invalid when the rules key is absent', () => {
+  // T-303d: a policy with no 'rules:' key throws a clear error.
+  // Fixed: parsePolicy now explicitly checks for missing 'rules:' key.
+  it('throws or is reported invalid when the rules key is absent', () => {
     const yaml = `---
 name: no-rules-gate
 version: "1.0"

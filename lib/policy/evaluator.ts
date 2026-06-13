@@ -91,14 +91,17 @@ function isNullLiteral(s: string): boolean {
 
 /**
  * Parse and evaluate a single atomic expression (no &&/|| at top level).
- * Handles: ==, !=, >=, <=, >, <, contains, !contains
+ * Handles: ==, !=, >=, <=, >, <, contains, !contains, !(compound)
+ *
+ * T-303: negation !(expr) is handled here BEFORE &&/|| splitting so that
+ * !(a && b) is correctly negated as a whole compound expression.
  */
 function evalAtom(expr: string, ctx: Record<string, unknown>): boolean {
   const trimmed = expr.trim();
 
-  // Negation: !(inner)
+  // Negation: !(inner) - delegate to evalExpression so && / || inside are handled correctly
   if (trimmed.startsWith('!(') && trimmed.endsWith(')')) {
-    return !evalAtom(trimmed.slice(2, -1), ctx);
+    return !evalExpression(trimmed.slice(2, -1), ctx);
   }
 
   // !contains
@@ -138,11 +141,11 @@ function evalAtom(expr: string, ctx: Record<string, unknown>): boolean {
       return false;
     }
 
-    // boolean literals
+    // boolean literals - strict === only (T-303: no String coercion fallback)
     if (rhsRaw === 'true' || rhsRaw === 'false') {
       const rhsBool = rhsRaw === 'true';
-      if (op === '==') return lhsVal === rhsBool || String(lhsVal) === rhsRaw;
-      if (op === '!=') return lhsVal !== rhsBool && String(lhsVal) !== rhsRaw;
+      if (op === '==') return lhsVal === rhsBool;
+      if (op === '!=') return lhsVal !== rhsBool;
       return false;
     }
 
@@ -197,8 +200,9 @@ function splitTopLevel(expr: string, op: '&&' | '||'): string[] {
 
 /**
  * Fully evaluate an expression string, respecting &&, ||, and nesting.
+ * Exported for reuse in lib/compliance/evaluator.ts (T-303 shared evaluator).
  */
-function evalExpression(expr: string, ctx: Record<string, unknown>): boolean {
+export function evalExpression(expr: string, ctx: Record<string, unknown>): boolean {
   const trimmed = expr.trim();
 
   // Split on || first (lowest precedence)

@@ -13,9 +13,14 @@
  *
  * Fields resolved against AgentEvalContext (see below).
  * Fields not present in context evaluate to `null` (falsy).
+ *
+ * T-301: live Agent fields (connectors, authMode, channelIds, sharingScope)
+ * are preferred when present; name heuristics are fallback only.
+ * dlpReviewed and httpApproved default to FALSE (fail-safe) when not live.
  */
 
 import type { Agent, Environment, ComplianceRule, ComplianceViolation } from '@/lib/types';
+import { evalExpression } from '@/lib/policy/evaluator';
 
 // ---------------------------------------------------------------------------
 // AgentEvalContext - the flat key/value view presented to the expression DSL
@@ -27,9 +32,11 @@ export interface AgentEvalContext {
   'agent.ownerEmail': string | null;
   'agent.ownerName': string | null;
   'agent.lifecycle': string | null;
-  /** Derived from naming conventions / mock scan results */
+  /** Auth mode: from live data when available, otherwise name heuristic */
   'agent.authMode': string;
+  /** False by default (fail-safe); set to true only from live data */
   'agent.dlpReviewed': boolean;
+  /** False by default (fail-safe); set to true only from live data */
   'agent.httpApproved': boolean;
   'agent.externalDataEgress': boolean;
   'agent.hasDirectlineChannel': boolean;
@@ -39,6 +46,8 @@ export interface AgentEvalContext {
   // Env fields
   'env.type': string;
   'env.dlpPolicyId': string | null;
+  /** True when any of the boolean signals above were derived from name heuristics */
+  derivedFromHeuristic: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,38 +56,82 @@ export interface AgentEvalContext {
 
 /**
  * Build the evaluation context for an agent/env pair.
- * Uses agent name heuristics and seed metadata to infer governance signals
- * without requiring live Dataverse scans.
+ *
+ * T-301: Prefers live fields (agent.authMode, agent.connectors, agent.channelIds)
+ * when present on the Agent record.  Falls back to name heuristics only when
+ * the live field is absent.  Sets derivedFromHeuristic=true whenever a
+ * heuristic was used for any signal.
+ *
+ * dlpReviewed and httpApproved are ALWAYS false unless explicitly provided
+ * by a live data source (fail-safe: unapproved unless proven otherwise).
  */
 export function buildEvalContext(agent: Agent, env: Environment): AgentEvalContext {
   const nameLower = agent.name.toLowerCase();
+  let derivedFromHeuristic = false;
 
-  // Infer auth mode from agent name / ownership patterns
-  let authMode = 'entra_id';
-  if (nameLower.includes('no auth') || agent.ownerEmail === null) {
-    authMode = 'anonymous';
-  } else if (nameLower.includes('user delegated')) {
-    authMode = 'user_delegated';
+  // ---------------------------------------------------------------------------
+  // authMode: prefer live field, fall back to name heuristic
+  // ---------------------------------------------------------------------------
+  let authMode: string;
+  if (agent.authMode !== undefined) {
+    authMode = agent.authMode;
+  } else {
+    derivedFromHeuristic = true;
+    if (nameLower.includes('no auth') || agent.ownerEmail === null) {
+      authMode = 'anonymous';
+    } else if (nameLower.includes('user delegated')) {
+      authMode = 'user_delegated';
+    } else {
+      authMode = 'entra_id';
+    }
   }
 
-  // Infer connectors from name
-  const hasHttpConnector =
-    nameLower.includes('http') ||
-    nameLower.includes('api') ||
-    nameLower.includes('external') ||
-    nameLower.includes('orchestrat');
+  // ---------------------------------------------------------------------------
+  // hasHttpConnector: prefer live connectors list, fall back to name heuristic
+  // ---------------------------------------------------------------------------
+  let hasHttpConnector: boolean;
+  if (agent.connectors !== undefined) {
+    hasHttpConnector = agent.connectors.some(
+      (c) => c === 'http' || c === 'http_webhook' || c.startsWith('http'),
+    );
+  } else {
+    derivedFromHeuristic = true;
+    hasHttpConnector =
+      nameLower.includes('http') ||
+      nameLower.includes('api') ||
+      nameLower.includes('external') ||
+      nameLower.includes('orchestrat');
+  }
 
-  // Infer channel presence
-  const hasDirectlineChannel =
-    nameLower.includes('customer') ||
-    nameLower.includes('public') ||
-    nameLower.includes('self-service') ||
-    nameLower.includes('portal');
-  const hasTeamsChannel = !hasDirectlineChannel;
+  // ---------------------------------------------------------------------------
+  // hasDirectlineChannel / hasTeamsChannel: prefer live channelIds
+  // ---------------------------------------------------------------------------
+  let hasDirectlineChannel: boolean;
+  let hasTeamsChannel: boolean;
+  if (agent.channelIds !== undefined) {
+    hasDirectlineChannel = agent.channelIds.includes('directline');
+    hasTeamsChannel = agent.channelIds.includes('teams');
+  } else {
+    derivedFromHeuristic = true;
+    hasDirectlineChannel =
+      nameLower.includes('customer') ||
+      nameLower.includes('public') ||
+      nameLower.includes('self-service') ||
+      nameLower.includes('portal');
+    hasTeamsChannel = !hasDirectlineChannel;
+  }
 
-  // DLP / approval heuristics
-  const dlpReviewed = env.type === 'Production' && agent.ownerEmail !== null;
-  const httpApproved = env.type !== 'Production';
+  // ---------------------------------------------------------------------------
+  // dlpReviewed: fail-safe = false (cannot infer from name)
+  // httpApproved: fail-safe = false (cannot infer from name)
+  // These must come from live data; heuristic defaults are always FALSE.
+  // ---------------------------------------------------------------------------
+  const dlpReviewed = false;   // fail-safe: unapproved unless live data says otherwise
+  const httpApproved = false;  // fail-safe: unapproved unless live data says otherwise
+
+  // ---------------------------------------------------------------------------
+  // Remaining derived signals
+  // ---------------------------------------------------------------------------
   const externalDataEgress = hasHttpConnector;
   const hasUnapprovedSharePointKS = nameLower.includes('legacy');
 
@@ -100,87 +153,37 @@ export function buildEvalContext(agent: Agent, env: Environment): AgentEvalConte
     'agent.hasUnapprovedSharePointKS': hasUnapprovedSharePointKS,
     'env.type': env.type,
     'env.dlpPolicyId': envHasDlp ? `dlp-${env.id}` : null,
+    derivedFromHeuristic,
   };
 }
 
-// ---------------------------------------------------------------------------
-// DSL expression evaluator
-// ---------------------------------------------------------------------------
+// evalExpression is imported from lib/policy/evaluator (T-303: shared evaluator)
+// The policy evaluator's version supports &&, ||, !, contains, !contains, and
+// all numeric/string/null/boolean comparisons - it is strictly a superset of
+// the old compliance-local evaluator.
 
-type LiteralValue = string | boolean | null;
-
-function parseLiteral(raw: string): LiteralValue {
-  const trimmed = raw.trim();
-  if (trimmed === 'null') return null;
-  if (trimmed === 'true') return true;
-  if (trimmed === 'false') return false;
-  // Quoted string
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
+// ---------------------------------------------------------------------------
+// Context conversion helper (T-303)
+// ---------------------------------------------------------------------------
 
 /**
- * Evaluate a single comparison clause: `lhs == rhs` or `lhs != rhs`.
- * lhs is a dotted key (agent.X or env.X); rhs is a literal value.
+ * Convert a flat AgentEvalContext (keys like 'agent.state', 'env.type') into
+ * a nested object ({ agent: { state: ... }, env: { type: ... } }) so that the
+ * shared policy evalExpression (which resolves dot-paths into nested objects)
+ * can be used without modification.
  */
-function evalClause(clause: string, ctx: AgentEvalContext): boolean {
-  clause = clause.trim();
-
-  // Handle `== null` and `!= null`
-  const neqNull = /^(\S+)\s*!=\s*null$/.exec(clause);
-  if (neqNull) {
-    const key = neqNull[1] as keyof AgentEvalContext;
-    return ctx[key] !== null && ctx[key] !== undefined;
+function flattenEvalContext(ctx: AgentEvalContext): Record<string, unknown> {
+  const nested: Record<string, Record<string, unknown>> = {};
+  for (const [key, value] of Object.entries(ctx)) {
+    if (key === 'derivedFromHeuristic') continue; // top-level meta field
+    const dotIdx = key.indexOf('.');
+    if (dotIdx === -1) continue;
+    const ns = key.slice(0, dotIdx);
+    const field = key.slice(dotIdx + 1);
+    if (!nested[ns]) nested[ns] = {};
+    nested[ns][field] = value;
   }
-  const eqNull = /^(\S+)\s*==\s*null$/.exec(clause);
-  if (eqNull) {
-    const key = eqNull[1] as keyof AgentEvalContext;
-    return ctx[key] === null || ctx[key] === undefined;
-  }
-
-  // `== true` / `== false`
-  const eqBool = /^(\S+)\s*==\s*(true|false)$/.exec(clause);
-  if (eqBool) {
-    const key = eqBool[1] as keyof AgentEvalContext;
-    const expected = eqBool[2] === 'true';
-    return ctx[key] === expected;
-  }
-
-  // `== "string"` or `!= "string"`
-  const neqStr = /^(\S+)\s*!=\s*(".*?"|'.*?'|\S+)$/.exec(clause);
-  if (neqStr) {
-    const key = neqStr[1] as keyof AgentEvalContext;
-    const expected = parseLiteral(neqStr[2]);
-    return ctx[key] !== expected;
-  }
-  const eqStr = /^(\S+)\s*==\s*(".*?"|'.*?'|\S+)$/.exec(clause);
-  if (eqStr) {
-    const key = eqStr[1] as keyof AgentEvalContext;
-    const expected = parseLiteral(eqStr[2]);
-    return ctx[key] === expected;
-  }
-
-  // Boolean presence check (just a key reference)
-  if (/^[\w.]+$/.test(clause)) {
-    const key = clause as keyof AgentEvalContext;
-    const val = ctx[key];
-    return val !== null && val !== undefined && val !== false && val !== '';
-  }
-
-  // Unrecognized clause - conservative default: no violation
-  return false;
-}
-
-/**
- * Evaluate a full DSL expression (supports `&&` compound clauses).
- * Returns true if the expression matches (i.e. a violation is triggered).
- */
-export function evalExpression(expression: string, ctx: AgentEvalContext): boolean {
-  const clauses = expression.split('&&').map((c) => c.trim()).filter(Boolean);
-  return clauses.every((clause) => evalClause(clause, ctx));
+  return nested as Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,9 +224,13 @@ export function evaluateAgents(
     const ctx = buildEvalContext(agent, env);
     const agentRef = `${agent.envId}/${agent.botId}`;
 
+    // Convert flat AgentEvalContext (keys like 'agent.state') to nested object
+    // so the shared evalExpression (policy evaluator) can resolve dot-paths.
+    const nestedCtx = flattenEvalContext(ctx);
+
     for (const rule of enabledRules) {
       const key = `${agentRef}|${rule.id}`;
-      const fired = evalExpression(rule.expression, ctx);
+      const fired = evalExpression(rule.expression, nestedCtx);
 
       if (fired && !seen.has(key)) {
         // New violation

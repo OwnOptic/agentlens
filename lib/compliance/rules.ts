@@ -36,7 +36,9 @@ export const defaultRulePack: ComplianceRule[] = [
     id: 'rule-auth-003',
     name: 'Service Principal Auth Recommended for Prod',
     type: 'authentication',
-    severity: 'info',
+    // T-306: elevated from 'info' to 'warning' - user-delegated auth in production
+    // is a real governance risk (token expiry, maker departure, shared credential).
+    severity: 'warning',
     expression: 'env.type == "Production" && agent.authMode == "user_delegated"',
     enabled: true,
   },
@@ -94,6 +96,41 @@ export const defaultRulePack: ComplianceRule[] = [
     type: 'connector',
     severity: 'critical',
     expression: 'agent.hasHttpConnector == true && env.type == "Production" && agent.httpApproved == false',
+    enabled: true,
+  },
+
+  // ---- Lifecycle / environment rules (T-306) ---------------------------------
+  {
+    id: 'rule-lifecycle-001',
+    name: 'Trial or PoC Agent Must Not Be Active in Production',
+    type: 'authentication',
+    severity: 'critical',
+    // A trial or PoC agent that reaches Active state in a Production environment
+    // bypassed the intended promotion gate. Block immediately.
+    expression: 'env.type == "Production" && agent.state == "Active" && agent.lifecycle == "poc"',
+    enabled: true,
+  },
+  {
+    id: 'rule-lifecycle-002',
+    name: 'Production Agents Must Use Service Principal Auth',
+    type: 'authentication',
+    severity: 'warning',
+    // Production agents running on user_delegated auth are fragile (token expiry,
+    // maker departure). They must be migrated to service principal / Entra ID app.
+    // Overlaps with rule-auth-003 intentionally - this one is lifecycle-scoped.
+    expression: 'env.type == "Production" && agent.lifecycle == "prod" && agent.authMode == "user_delegated"',
+    enabled: true,
+  },
+  {
+    id: 'rule-lifecycle-003',
+    name: 'Agent 365 Security Features Require A365 License by 2026-07-01',
+    type: 'channel',
+    severity: 'warning',
+    // As of 2026-07-01, Copilot Studio agent security features (audit, DLP enforcement,
+    // session recording) require an Agent 365 (A365) license. Agents without A365 will
+    // silently lose security coverage. This rule fires as a warning to prompt remediation
+    // before the deadline. Evaluated only on prod-lifecycle agents.
+    expression: 'env.type == "Production" && agent.lifecycle == "prod"',
     enabled: true,
   },
 ];
