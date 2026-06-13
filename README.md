@@ -47,7 +47,7 @@ AgentLens has 17 pages, grouped into three sections in the left sidebar. **"Live
 | **Agent Discovery** | Finds agents across 4 stores: Copilot Studio, M365 Agent Builder, Azure AI Foundry, Microsoft Fabric. Each source shows connected / not-configured / license-required. | **Live** |
 | **Inventory** | Sortable table of every agent with owner, environment, model, auth. | Demo |
 | **Sprawl** | Default-environment sprawl + a migration tracker. | Demo |
-| **Cost** | Per-agent message volume and estimated cost. | Demo |
+| **Cost** | **Real Azure spend** (Cost Management: actual MTD + forecast, incl. Power Platform / Copilot Studio PAYG meters) above a per-agent message estimate. | **Live (Azure spend)** + Demo (per-agent) |
 | **Alerts** | Budget breaches, idle/orphaned agents, volume spikes. | Demo |
 | **Conversation KPIs** | Real intent + sentiment analysis of agent conversations (resolution rate, escalation, CSAT proxy). PII-safe: only aggregate counts are kept. | **Live** |
 | **Health** | Per-agent error rate, latency, failed sessions. | Demo |
@@ -122,9 +122,11 @@ For a **production deployment** you need four tools and two kinds of Azure acces
 | Tool | Why | Install | Verify |
 |------|-----|---------|--------|
 | **Node.js 20 LTS** | runs the app | <https://nodejs.org> | `node --version` -> `v20+` |
-| **Azure CLI (`az`)** | creates the app registrations | <https://aka.ms/installazurecliwindows> | `az version` |
-| **Azure Developer CLI (`azd`)** | one-command deploy | <https://aka.ms/azd-install> | `azd version` |
+| **Azure CLI (`az`)** | creates app registrations + deploys | <https://aka.ms/installazurecliwindows> | `az version` |
+| **Docker** | builds the container image (for the Container Apps path) | <https://www.docker.com/products/docker-desktop> | `docker --version` |
 | **Git** | gets the code | <https://git-scm.com> | `git --version` |
+
+> You do **not** need `azd` — deployment is plain `az` (Container Apps or `az deployment` for the Bicep path). Docker is only needed for the Container Apps path in Section 7.
 
 ### Azure access you need
 - A **Global Administrator** (or someone who is) to grant admin consent and assign the Power Platform Administrator role - **one time only**.
@@ -151,9 +153,11 @@ You do not create these by hand - the script in the next section does it for you
 
 ## 7. Production deployment - step by step
 
-This deploys AgentLens to Azure App Service, stores all secrets in Key Vault, and uses a managed identity so there is no master password. Four steps. Copy-paste each block.
+Step 1 (app registrations) is shared. Step 2 has **two hosting options** - pick one:
+- **Option A - Azure Container Apps** (recommended for testing/demo): scale-to-zero, runs inside the free monthly grant = **$0**. This is the path we validated end-to-end.
+- **Option B - Azure App Service + Bicep** (always-on production): managed identity + Key Vault references, one `az deployment`. Use **B1 or higher** - the **F1 Free tier cannot run this app** (its CPU quota is too small for the Next.js cold-start; it trips `QuotaExceeded`).
 
-> Before you start: `git clone` the repo and `cd agentlens` if you haven't already, and run `az login` to sign in to the correct tenant.
+> Before you start: `git clone` the repo and `cd agentlens`, and run `az login` to sign in to the correct tenant.
 
 ### Step 1 - create the two app registrations
 
@@ -175,20 +179,40 @@ This creates both app registrations, generates their secrets, and (if you pass a
 3. **Assign Admin/Maker roles** to the people who should sign in. *(Sign-in is restricted to assigned users.)*
 4. **(Later, after Step 2)** give the web app's managed identity access to Key Vault - the Bicep in Step 2 does this automatically, so you only do this by hand if you deployed the app some other way.
 
-### Step 2 - deploy the infrastructure and app
+### Step 2, Option A - Azure Container Apps (recommended, $0)
+
+Build the image (the repo ships a [Dockerfile](Dockerfile)), push it to a free registry (GitHub Container Registry), and create a scale-to-zero container app.
 
 ```bash
-azd up
+# 1. build the standalone image
+docker build -t ghcr.io/<your-org>/agentlens:latest .
+
+# 2. push to ghcr (needs a gh token with write:packages: gh auth refresh -s write:packages,read:packages)
+gh auth token | docker login ghcr.io -u <your-gh-user> --password-stdin
+docker push ghcr.io/<your-org>/agentlens:latest
+
+# 3. one-time: register the providers + extension
+az provider register -n Microsoft.App && az provider register -n Microsoft.OperationalInsights
+az extension add -n containerapp
+
+# 4. create the environment + app (scale-to-zero = $0 when idle)
+az containerapp env create -n agentlens-env -g <rg> -l westeurope --logs-destination none
+az containerapp create -n agentlens -g <rg> --environment agentlens-env \
+  --image ghcr.io/<your-org>/agentlens:latest \
+  --registry-server ghcr.io --registry-username <your-gh-user> --registry-password "$(gh auth token)" \
+  --target-port 3000 --ingress external --min-replicas 0 --max-replicas 1 --cpu 0.5 --memory 1.0Gi
 ```
-`azd` will ask for: a subscription, a region, and the parameter values (tenant ID, the two client IDs, your Dataverse org URLs, etc.). It then creates, in one go:
-- an App Service (Linux, Node 20) with a **system-assigned managed identity**,
-- a **Key Vault** (the managed identity is granted `Key Vault Secrets User` automatically),
-- (optional) an Azure PostgreSQL database if you set `deployPostgres=true`,
-- and deploys the built app.
+**What you should see:** the command prints an FQDN like `agentlens.<hash>.westeurope.azurecontainerapps.io`. Open it - the first request after idle cold-starts the container (a few seconds), then it's instant. For live tenant data, pass the SP env vars via `--env-vars AZURE_TENANT_ID=... AZURE_CLIENT_ID=... AZURE_SUBSCRIPTION_ID=...` (the client secret via `--secrets` + a secretref).
 
-**What you should see:** `azd` prints `SUCCESS` and the app URL. The infrastructure is defined in [infra/main.bicep](infra/main.bicep) and validated to compile cleanly.
+### Step 2, Option B - Azure App Service + Bicep (always-on)
 
-> **Tip:** to preview what will be created without deploying, run `az bicep build --file infra/main.bicep` (should print nothing = no errors).
+```bash
+az group create -n <rg> -l westeurope
+az deployment group create -g <rg> --template-file infra/main.bicep \
+  --parameters baseName=agentlens-prod azureTenantId=<tenant> azureClientId=<reader-client-id> \
+               azureAdClientId=<webapp-client-id> appServiceSku=B1
+```
+This creates, in one go: an App Service (Linux, Node 20) with a **system-assigned managed identity**, a **Key Vault** (the identity is granted `Key Vault Secrets User` automatically), optional Azure App Insights + PostgreSQL, and wires all secrets as Key Vault references. Then deploy the app build (`npm run build && npm run postbuild:standalone`, zip `.next/standalone`, `az webapp deploy --type zip`). Defined in [infra/main.bicep](infra/main.bicep); preview with `az bicep build --file infra/main.bicep` (0 errors). **Use `appServiceSku=B1` or higher - not F1.**
 
 ### Step 3 - put the secret values into Key Vault
 
@@ -224,6 +248,7 @@ For **local development**, copy `.env.example` to `.env.local` and fill in only 
 | `AZURE_TENANT_ID` | for live data | your tenant | `az account show --query tenantId -o tsv` |
 | `AZURE_CLIENT_ID` | for live data | the **Reader** app's client ID | printed by the Step 1 script |
 | `AZURE_CLIENT_SECRET` | for live data (dev only) | the Reader app's secret | Step 1 script (prod: Key Vault `AZURE-CLIENT-SECRET`) |
+| `AZURE_SUBSCRIPTION_ID` | for the live Cost page | the subscription to read spend from | `az account show --query id -o tsv` (SP needs **Cost Management Reader**) |
 | `AZURE_AD_CLIENT_ID` | to enable sign-in | the **WebApp** app's client ID | Step 1 script |
 | `WEBAPP_CLIENT_SECRET` | to enable sign-in | the WebApp app's secret | Step 1 script (prod: Key Vault `WEBAPP-CLIENT-SECRET`) |
 | `AUTH_SECRET` | to enable sign-in | signs sign-in tokens | `openssl rand -base64 32` (Step 1 script generates one) |
@@ -314,7 +339,7 @@ Still stuck? Check the App Service log stream: `az webapp log tail --name <app-n
 
 **Do I have to import anything into Dataverse?** No. That's the point - AgentLens is a standalone web app.
 
-**Does it change anything in my tenant?** No. It is read-only. The only things created are the two app registrations and the Azure resources you deploy (App Service, Key Vault).
+**Does it change anything in my tenant?** No. It is read-only. The only things created are the two app registrations and the Azure resources you choose to deploy (a Container App, or an App Service + Key Vault).
 
 **Can I run it without sign-in?** Yes, for local dev - leave `AZURE_AD_CLIENT_ID` unset. For production, enable sign-in.
 
@@ -324,7 +349,7 @@ Still stuck? Check the App Service log stream: `az webapp log tail --name <app-n
 
 **Is it open source?** Not yet - the repo is private pending IP clearance.
 
-**How much does it cost to run?** Roughly: an App Service B1 (~$13/mo), a Key Vault (pennies), and optionally Azure OpenAI (pay-per-use) and a database. The Basic tier is fine for demo/internal use; use Standard (S1) for a production client.
+**How much does it cost to run?** **$0 on Azure Container Apps** (scale-to-zero + the free monthly grant) - the recommended path for testing/demo. For an always-on App Service: ~$13/mo (B1) + Key Vault (pennies), optionally Azure OpenAI (pay-per-use) and a database. **Note:** the App Service **F1 Free tier does not work** - its CPU quota is too small for the app's cold-start; use B1+ or Container Apps.
 
 ---
 
@@ -338,14 +363,17 @@ Still stuck? Check the App Service log stream: `az webapp log tail --name <app-n
 | **DLP** | Data Loss Prevention - rules about which connectors agents may use |
 | **Managed identity** | a passwordless identity Azure gives your app to read Key Vault |
 | **SP / service principal** | the actual account an app registration creates in your tenant |
-| **azd** | Azure Developer CLI - the `azd up` one-command deployer |
-| **Standalone output** | a self-contained build of the app that runs without a build step on the server |
+| **Container Apps (ACA)** | Azure's serverless container host; scale-to-zero + a free monthly grant make the demo deploy $0 |
+| **ghcr** | GitHub Container Registry - free image registry the Container Apps path pulls from |
+| **Standalone output** | a self-contained build of the app that runs without a build step on the server (`node server.js`) |
 
 ---
 
 ## For developers
 
 - **Tech:** Next.js 14 (App Router) - TypeScript (strict) - Tailwind CSS - Zustand - Recharts - lucide-react - `@azure/msal-node` - `@azure/identity` / `@azure/keyvault-secrets` - NextAuth - Supabase - Azure OpenAI.
-- **Run checks:** `npx tsc --noEmit` (types), `npm run build` (production build), `az bicep build --file infra/main.bicep` (infra).
-- **Docs:** [DEPLOY.md](docs/DEPLOY.md) (runbook) - [APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md) (permission matrix) - [PLAN-DEPLOY.md](docs/PLAN-DEPLOY.md) (deployment design) - [PLAN-AUDIT-ROBUSTNESS.md](docs/PLAN-AUDIT-ROBUSTNESS.md) (known-issues backlog).
+- **Run checks:** `npm test` (vitest unit suite), `npx tsc --noEmit` (types), `npm run build` (production build), `az bicep build --file infra/main.bicep` (infra).
+- **Container:** [Dockerfile](Dockerfile) (multi-stage Next standalone) + `npm run postbuild:standalone` (copies static assets into `.next/standalone`).
+- **Persistence:** gate decisions + compliance violation state persist to Supabase when configured, else an in-memory fallback (so it runs with an empty `.env`).
+- **Docs:** [DEPLOY.md](docs/DEPLOY.md) (runbook) - [APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md) (permission matrix) - [PLAN-DEPLOY.md](docs/PLAN-DEPLOY.md) (deployment design) - [PLAN-AUDIT-ROBUSTNESS.md](docs/PLAN-AUDIT-ROBUSTNESS.md) (audit + known-issues backlog, all phases executed).
 - **License:** Private (pending IP-ownership clearance).
