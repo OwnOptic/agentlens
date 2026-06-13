@@ -1,0 +1,17 @@
+# Build context excludes - keep the image build fast and clean.
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+deploy.zip
+.playwright-mcp
+.vscode
+*.log
+docs
+README.md
+infra
+azure.yaml
+supabase
