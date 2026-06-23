@@ -22,6 +22,7 @@
 12. [Troubleshooting (every common error)](#12-troubleshooting-every-common-error)
 13. [FAQ](#13-faq)
 14. [Glossary](#14-glossary)
+15. [API reference](#15-api-reference)
 
 ---
 
@@ -366,6 +367,53 @@ Still stuck? Check the App Service log stream: `az webapp log tail --name <app-n
 | **Container Apps (ACA)** | Azure's serverless container host; scale-to-zero + a free monthly grant make the demo deploy $0 |
 | **ghcr** | GitHub Container Registry - free image registry the Container Apps path pulls from |
 | **Standalone output** | a self-contained build of the app that runs without a build step on the server (`node server.js`) |
+
+---
+
+## 15. API reference
+
+### A. The app's own endpoints (what the browser calls)
+
+All routes live under `/api`. After the security hardening, every data route calls `requireSession`; in **demo / auth-optional mode** (no `AZURE_AD_CLIENT_ID`) the guard returns a synthetic dev-admin, so the app is fully usable without sign-in. State-changing routes additionally require the `admin` role.
+
+| Endpoint | Called by (page) | Method(s) | Notes |
+|---|---|---|---|
+| `/api/overview` | Overview | GET | live ARG counts |
+| `/api/discover` | Agent Discovery | GET | 4-source sweep |
+| `/api/conversation-intel` | Conversation KPIs | GET | Dataverse transcripts (PII-safe, aggregate only) |
+| `/api/cost` | Cost | GET | real Azure spend + per-agent estimate |
+| `/api/dlp` | DLP Advisor | GET | recommendations + live tenant DLP comparison |
+| `/api/compliance` | Compliance | GET, POST | POST = ack/resolve violations (admin) |
+| `/api/gates` | Release Gates | GET, POST, DELETE | POST/DELETE = sign/revoke decision (admin) |
+| `/api/alerts` | Alerts | GET, POST, PATCH | POST = run rules / PATCH = state (admin) |
+| `/api/maturity` | Maturity | GET, POST | POST = re-score (admin) |
+| `/api/health` | Health | GET | |
+| `/api/ask` | Ask (AI) | POST | Azure OpenAI, rate-limited, 2000-char cap |
+| `/api/setup-status` | Settings | GET | live setup probe battery |
+| `/api/config/verify`, `/api/config/save` | Settings / Setup wizard | POST (+ GET source map) | |
+| `/api/auth/providers`, `/api/auth/session` | UserChip (every page) | GET | NextAuth |
+| `/api/auth/[...nextauth]` | sign-in / callback / csrf | GET, POST | NextAuth handler |
+
+**Backend-only routes** (not called by the current UI): `/api/ingest` (scheduled ingestion, guarded by `CRON_SECRET`), `/api/agents`, `/api/kpis`, `/api/report` (mock-seed surfaces kept for integration), `/api/live` (legacy - superseded by `/api/overview`).
+
+### B. External APIs the backend calls (via the service principal)
+
+All read-only, authenticated with the AgentLens-Reader SP unless noted.
+
+| Host | Used for | Auth / permission |
+|---|---|---|
+| `login.microsoftonline.com` | Entra token (MSAL client-credentials) | SP client secret |
+| `management.azure.com` | Azure Resource Graph (agent/env inventory) · Cost Management (real spend) · Foundry agents | ARM token; PP-Admin role (ARG), Cost Management Reader (cost) |
+| `graph.microsoft.com` | owner resolution · Agent 365 `copilotPackages` | `User.Read.All`; `CopilotPackages.Read.All` (license-gated) |
+| `<org>.crm.dynamics.com` | Dataverse Web API — transcripts, KPIs, deep scan, agents | Dataverse per-environment |
+| `api.bap.microsoft.com` | BAP Governance — tenant DLP policies | ARM token |
+| `api.powerplatform.com` · `licensing.powerplatform.microsoft.com` | PPAC licensing / capacity | ARM token |
+| `api.fabric.microsoft.com` (+ `analysis.windows.net` audience) | Fabric data agents | Fabric Administrator |
+| `<resource>.openai.azure.com` | Azure OpenAI — Ask AI + conversation classifier | API key (Key Vault) |
+| `<project>.supabase.co` | persistence (history) — optional | service key (Key Vault) |
+| `*.webhook.office.com` (Teams) | alert delivery — optional | webhook URL (Key Vault) |
+
+> **Data egress:** the only outbound writes are to your own database (Supabase / Azure Postgres) and the optional Teams webhook. No tenant data is sent anywhere else; conversation content is processed in-memory and never stored.
 
 ---
 
