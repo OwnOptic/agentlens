@@ -45,3 +45,6 @@ BUILD_SUMMARY.txt
 
 # Local deploy artifact
 deploy.zip
+
+# packaged declarative agent (built by scripts/package-agent.mjs)
+/agent/build

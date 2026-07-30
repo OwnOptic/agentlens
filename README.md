@@ -13,7 +13,7 @@
 3. [The 5-minute local demo](#3-the-5-minute-local-demo-no-azure-needed)
 4. [Concepts you need to understand first](#4-concepts-you-need-to-understand-first)
 5. [Prerequisites (install these once)](#5-prerequisites-install-these-once)
-6. [The two app registrations explained](#6-the-two-app-registrations-explained)
+6. [The app registrations explained](#6-the-app-registrations-explained)
 7. [Production deployment - step by step](#7-production-deployment-step-by-step)
 8. [Every environment variable explained](#8-every-environment-variable-explained)
 9. [Verifying it works (the Setup page)](#9-verifying-it-works-the-setup-page)
@@ -23,6 +23,7 @@
 13. [FAQ](#13-faq)
 14. [Glossary](#14-glossary)
 15. [API reference](#15-api-reference)
+16. [The declarative agent (Microsoft 365 Copilot)](#16-the-declarative-agent-microsoft-365-copilot)
 
 ---
 
@@ -137,18 +138,23 @@ For a **production deployment** you need four tools and two kinds of Azure acces
 
 ---
 
-## 6. The two app registrations explained
+## 6. The app registrations explained
 
-AgentLens uses **two** separate identities. This is deliberate (least privilege - a security reviewer will expect it):
+AgentLens uses separate identities on purpose (least privilege - a security reviewer will expect it):
 
 | Registration | What it is | What it can do | Secrets |
 |--------------|-----------|----------------|---------|
 | **AgentLens-Reader** | the data account | Reads your tenant: agents (via Azure Resource Graph), owners (via Microsoft Graph `User.Read.All`), conversation transcripts (via Dataverse). **Read-only. Never writes.** | one client secret |
 | **AgentLens-WebApp** | the sign-in account | Lets your people sign in to the AgentLens website with their Microsoft account. Has **zero** data permissions. Two roles: `Admin` and `Maker`. | one client secret + a random `AUTH_SECRET` for signing sign-in tokens |
+| **AgentLens-MCP** | the agent's front door | Only needed for the [declarative agent](#16-the-declarative-agent-microsoft-365-copilot). Proves who is calling the MCP server (Entra SSO, scope `access_as_user`). Has **zero** data permissions. | one client secret |
 
-**Why two and not one?** The Reader holds powerful read access (Power Platform Admin). The WebApp is the public sign-in door. Keeping them separate means a problem with the sign-in door never exposes the powerful read account. You *can* merge them into one, but then your sign-in app would carry admin-level read access for no benefit. Keep them separate.
+**Why separate and not one?** The Reader holds powerful read access (Power Platform Admin). The WebApp and the MCP app are the public doors. Keeping them apart means a problem with a door never exposes the powerful read account. You *can* merge them, but then a sign-in app would carry admin-level read access for no benefit. Keep them separate.
 
-You do not create these by hand - the script in the next section does it for you and prints the few steps that genuinely need a human admin.
+You do not create these by hand:
+- `scripts/provision-app-registrations.ps1` creates **Reader + WebApp** (next section).
+- `scripts/provision-agent-mcp-app.ps1` creates **MCP** (only if you deploy the agent - see [section 16](#16-the-declarative-agent-microsoft-365-copilot)).
+
+Both scripts are idempotent and print the few steps that genuinely need a human admin.
 
 ---
 
@@ -417,11 +423,124 @@ All read-only, authenticated with the AgentLens-Reader SP unless noted.
 
 ---
 
+## 16. The declarative agent (Microsoft 365 Copilot)
+
+Everything above describes the **web console**. AgentLens also ships as a **declarative
+agent** for Microsoft 365 Copilot, so an administrator can ask governance questions in
+plain language inside Copilot instead of opening a dashboard.
+
+The agent lives in [`agent/`](agent/README.md). It holds **no data access of its own**.
+It calls the AgentLens **MCP server**, which authenticates as `AgentLens-Reader` and
+reads the same five APIs, read-only:
+
+```
+user -> declarative agent            (agent/appPackage)
+     -> AgentLens-MCP                (Entra SSO gate - proves who is calling)
+     -> AgentLens-Reader             (client credentials - read-only)
+     -> Azure Resource Graph | Microsoft Graph | Power Platform Governance API
+        | Dataverse (aggregate only) | Azure Cost Management
+```
+
+### What the agent can do
+
+The five conversation starters map to the five MCP tools:
+
+| Ask it | It returns |
+|---|---|
+| "Sweep every agent store in my tenant and flag sprawl and orphans." | Live inventory across Copilot Studio, Agent Builder, Foundry and Fabric, with owners, orphans and duplicate clusters |
+| "What is my DLP and compliance posture across all agents?" | DLP policy per environment, a tenant compliance score, and risky patterns |
+| "Which agents actually deliver value, and what do they cost?" | Aggregate usage joined with real Azure spend, and a keep / improve / consolidate / retire verdict |
+| "Find duplicate agents and draft a consolidation plan." | Duplicate clusters plus an improvement plan, as a branded PDF |
+| "Draw a map of my agents." | A Mermaid diagram of the estate |
+
+### Step 1 - create the MCP app registration
+
+This is the **third** registration (see [section 6](#6-the-app-registrations-explained)).
+It secures the MCP endpoint; it grants no tenant data access.
+
+```powershell
+./scripts/provision-agent-mcp-app.ps1 `
+    -TenantId     "<your-tenant-guid>" `
+    -McpUrl       "https://agentlens-mcp.<region>.azurecontainerapps.io/mcp" `
+    -KeyVaultName "kv-agentlens"     # optional
+```
+
+The script is idempotent. It creates (or reuses) `AgentLens-MCP`, sets the Application
+ID URI `api://<appId>`, exposes the delegated scope `access_as_user`, pre-authorizes the
+Microsoft 365 host clients so users are not prompted inside Copilot, creates the service
+principal and a client secret, and prints the manual steps plus a ready-to-paste env block.
+
+Prefer raw Azure CLI (for example in Cloud Shell)? The equivalent minimum is:
+
+```bash
+# 1. create the app + service principal
+APP_ID=$(az ad app create --display-name "AgentLens-MCP" \
+  --sign-in-audience AzureADMyOrg --query appId -o tsv)
+az ad sp create --id "$APP_ID"
+
+# 2. set the Application ID URI
+az ad app update --id "$APP_ID" --identifier-uris "api://$APP_ID"
+
+# 3. expose access_as_user and pre-authorize the M365 hosts
+#    (nested api{} cannot be expressed by az ad app update - patch via Graph)
+#    the PowerShell script above does this for you
+
+# 4. client secret
+az ad app credential reset --id "$APP_ID" --display-name agentlens-mcp --years 2 --append
+
+# 5. admin consent (Global Administrator)
+az ad app permission admin-consent --id "$APP_ID"
+```
+
+> Step 3 is why the PowerShell script exists: `az ad app update` cannot express the
+> nested `api` object, so the script PATCHes Microsoft Graph directly.
+
+**A Global Administrator must grant admin consent** before the agent will work.
+
+### Step 2 - package the agent
+
+The manifests use `${{TOKEN}}` placeholders so no environment-specific value is committed:
+
+```bash
+# generate ONCE and keep stable - a new GUID creates a new app in the tenant
+export AGENT_APP_ID="<your-stable-guid>"
+export AGENTLENS_MCP_URL="https://agentlens-mcp.<region>.azurecontainerapps.io/mcp"
+
+node scripts/package-agent.mjs
+```
+
+Output: `agent/build/agentlens-agent.zip` (gitignored).
+
+### Step 3 - sideload and verify
+
+1. Go to <https://m365.cloud.microsoft/chat>.
+2. **Agents** -> **Add agent** -> **Upload custom agent** -> select the zip.
+3. Open **AgentLens** in the sidebar and run the first starter.
+4. Approve the connection prompt the first time.
+5. **Confirm the numbers are your tenant's**, not samples. If a source is not connected,
+   the agent says so explicitly rather than inventing a figure.
+
+### Security posture
+
+Same guarantees as the console, enforced in the agent's instructions:
+
+- **Read-only.** The agent cannot create, modify, share or delete anything.
+- **Honesty first.** Every number comes from a tool result. Not connected means it says
+  so - never a placeholder or an estimate.
+- **Aggregate only.** Conversation transcript data is counts and rates. No message
+  content and no personal data beyond an agent owner's name ever leaves the tenant.
+- **No standing data grant on the agent.** All read permissions sit on `AgentLens-Reader`.
+
+Full detail, including how to switch the MCP runtime from anonymous (development) to
+Entra SSO (production): [`agent/README.md`](agent/README.md).
+
+---
+
 ## For developers
 
 - **Tech:** Next.js 14 (App Router) - TypeScript (strict) - Tailwind CSS - Zustand - Recharts - lucide-react - `@azure/msal-node` - `@azure/identity` / `@azure/keyvault-secrets` - NextAuth - Supabase - Azure OpenAI.
 - **Run checks:** `npm test` (vitest unit suite), `npx tsc --noEmit` (types), `npm run build` (production build), `az bicep build --file infra/main.bicep` (infra).
 - **Container:** [Dockerfile](Dockerfile) (multi-stage Next standalone) + `npm run postbuild:standalone` (copies static assets into `.next/standalone`).
 - **Persistence:** gate decisions + compliance violation state persist to Supabase when configured, else an in-memory fallback (so it runs with an empty `.env`).
-- **Docs:** [DEPLOY.md](docs/DEPLOY.md) (runbook) - [APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md) (permission matrix) - [PLAN-DEPLOY.md](docs/PLAN-DEPLOY.md) (deployment design) - [PLAN-AUDIT-ROBUSTNESS.md](docs/PLAN-AUDIT-ROBUSTNESS.md) (audit + known-issues backlog, all phases executed).
+- **Docs:** [agent/README.md](agent/README.md) (declarative agent) - [DEPLOY.md](docs/DEPLOY.md) (runbook) - [APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md) (permission matrix) - [PLAN-DEPLOY.md](docs/PLAN-DEPLOY.md) (deployment design) - [PLAN-AUDIT-ROBUSTNESS.md](docs/PLAN-AUDIT-ROBUSTNESS.md) (audit + known-issues backlog, all phases executed).
 - **License:** Private (pending IP-ownership clearance).

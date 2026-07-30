@@ -1,0 +1,20 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "AgentLens",
+  "description_for_human": "Read-only governance data for every AI agent in your Microsoft 365 tenant.",
+  "description_for_model": "Reads live, read-only governance data about the AI agents in the signed-in user's Microsoft 365 tenant: the inventory across Copilot Studio, M365 Agent Builder, Azure AI Foundry and Microsoft Fabric; Data Loss Prevention posture per environment; aggregate usage joined with real Azure spend; duplicate clusters and a consolidation plan; and a map of the estate. All operations are read-only and never modify the tenant.",
+  "namespace": "agentlens",
+  "functions": [],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "spec": {
+        "url": "${{AGENTLENS_MCP_URL}}"
+      },
+      "run_for_functions": [
+        "*"
+      ]
+    }
+  ]
+}

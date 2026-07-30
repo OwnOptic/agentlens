@@ -1,0 +1,37 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "${{AGENT_APP_ID}}",
+  "developer": {
+    "name": "Elliot Margot",
+    "websiteUrl": "https://e-margot.ch",
+    "privacyUrl": "https://e-margot.ch/privacy",
+    "termsOfUseUrl": "https://e-margot.ch/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "AgentLens",
+    "full": "AgentLens - AI agent governance"
+  },
+  "description": {
+    "short": "Govern every AI agent in your Microsoft 365 tenant.",
+    "full": "AgentLens gives you one live, read-only view of every AI agent in your tenant - across Copilot Studio, Microsoft 365 Agent Builder, Azure AI Foundry and Microsoft Fabric. It surfaces Data Loss Prevention posture per environment, joins aggregate usage with real Azure spend, and tells you which agents to promote, consolidate or retire. AgentLens never writes to your tenant and only aggregate counts ever leave it."
+  },
+  "accentColor": "#2A3B4E",
+  "copilotAgents": {
+    "declarativeAgents": [
+      {
+        "id": "agentlens",
+        "file": "declarativeAgent.json"
+      }
+    ]
+  },
+  "permissions": [
+    "identity"
+  ],
+  "validDomains": []
+}
