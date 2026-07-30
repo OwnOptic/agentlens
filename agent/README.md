@@ -74,19 +74,80 @@ provision / preview flow.
 
 ## Authentication
 
-`ai-plugin.json` declares no `auth` block, which means the MCP server is treated as
-anonymous. That is fine while the server is local or in development.
+`auth` is a **required** property of the plugin runtime. The committed `ai-plugin.json`
+ships with:
 
-**Before production**, secure the endpoint with Entra SSO:
+```json
+"auth": { "type": "None" }
+```
 
-1. Run `scripts/provision-agent-mcp-app.ps1` to create `AgentLens-MCP`, expose the
-   `access_as_user` scope, and pre-authorize the Microsoft 365 host clients.
-2. Configure the MCP server to validate the inbound token audience `api://<mcp-app-id>`.
-3. Add the matching `auth` block to the runtime in `ai-plugin.json`, or regenerate the
-   plugin through Agents Toolkit (**Add an Action** -> **Start with an MCP Server** ->
-   **Microsoft Entra SSO**), which writes the vault reference for you.
+which is correct **for development only** - the MCP server is treated as anonymous.
+Valid types are `None`, `OAuthPluginVault` and `ApiKeyPluginVault`.
 
-Reference: [Build a plugin for a declarative agent from an MCP server](https://learn.microsoft.com/microsoft-365/copilot/extensibility/build-mcp-plugins).
+### Switching to Microsoft Entra SSO (production)
+
+Secrets and tenant-specific IDs are never committed. The auth config ID is injected at
+package time, which flips the runtime to:
+
+```json
+"auth": { "type": "OAuthPluginVault", "reference_id": "<auth config ID>" }
+```
+
+Microsoft's flow has four steps
+([docs](https://learn.microsoft.com/microsoft-365/copilot/extensibility/plugin-authentication-entra-sso)):
+
+**Step 1 - register the Entra app that secures the MCP server.**
+`scripts/provision-agent-mcp-app.ps1` does this (`AgentLens-MCP`). Note its client ID.
+
+**Step 2 - create the Entra SSO auth config.** This record lives in the *Microsoft
+Enterprise token store*, not in Entra. It produces an **auth config ID** and an
+**Application ID URI**. Either:
+- VS Code + [Agents Toolkit](https://aka.ms/M365AgentsToolkit) -> **Add an Action** ->
+  **Start with an MCP Server** -> **Microsoft Entra SSO** -> supply the client ID. It
+  creates the config and updates the manifest for you; or
+- [Teams developer portal](https://dev.teams.microsoft.com/tools) -> **Tools** ->
+  **Microsoft Entra SSO client ID registration**. The **Base URL** must match the
+  `url` in `ai-plugin.json` exactly.
+
+**Step 3 - update the Entra app registration.** Re-run the provisioning script with the
+URI from step 2; it applies all three requirements:
+
+```powershell
+./scripts/provision-agent-mcp-app.ps1 -TenantId <guid> -McpUrl https://... `
+    -SsoApplicationIdUri "<Application ID URI from step 2>"
+```
+
+| Requirement | Value |
+|---|---|
+| `identifierUris` | must include the auth config's Application ID URI |
+| Web redirect URI | `https://teams.microsoft.com/api/platform/v1.0/oAuthConsentRedirect` |
+| Expose an API -> client application | `ab3be6b7-f5df-413d-ac2d-abf1e3fd9c0b` (Microsoft Enterprise token store) |
+
+> That last GUID is the **only** client that needs pre-authorization. Copilot acquires
+> the token through the Enterprise token store. This is not the Teams tab-SSO client-ID
+> list - that pattern does not apply here.
+
+**Step 4 - validate the token on the MCP server.** Accept the SSO Application ID URI as
+the token **audience**. If you also validate the calling client, allow
+`ab3be6b7-f5df-413d-ac2d-abf1e3fd9c0b`. Reject everything else. If the server uses the
+[on-behalf-of flow](https://learn.microsoft.com/entra/identity-platform/v2-oauth2-on-behalf-of-flow)
+to reach another API needing consent, return `401 Unauthorized` so the agent prompts the
+user to sign in.
+
+Then repackage with the auth config ID:
+
+```bash
+MCP_AUTH_REFERENCE_ID="<auth config ID>" \
+AGENT_APP_ID="<guid>" \
+AGENTLENS_MCP_URL="https://..." \
+node scripts/package-agent.mjs
+```
+
+The script prints which auth mode it packaged, so you cannot ship `None` by accident.
+
+> Troubleshooting sign-in failures (audience mismatch, wrong `reference_id`, base URL
+> mismatch): [Troubleshoot MCP and API plugin authentication](https://learn.microsoft.com/microsoft-365/copilot/extensibility/plugin-authentication-troubleshooting).
+> Enable developer mode to surface auth errors in the agent's debug card.
 
 ## Editing the agent's behaviour
 

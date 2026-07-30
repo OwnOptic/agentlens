@@ -466,9 +466,21 @@ It secures the MCP endpoint; it grants no tenant data access.
 ```
 
 The script is idempotent. It creates (or reuses) `AgentLens-MCP`, sets the Application
-ID URI `api://<appId>`, exposes the delegated scope `access_as_user`, pre-authorizes the
-Microsoft 365 host clients so users are not prompted inside Copilot, creates the service
-principal and a client secret, and prints the manual steps plus a ready-to-paste env block.
+ID URI `api://<appId>`, exposes the delegated scope `access_as_user`, registers the
+consent redirect URI, pre-authorizes the **Microsoft Enterprise token store**
+(`ab3be6b7-f5df-413d-ac2d-abf1e3fd9c0b` - the client Copilot uses to acquire the token),
+creates the service principal and a client secret, and prints the remaining manual steps
+plus a ready-to-paste env block.
+
+To finish Entra SSO you also create an **auth config** (Agents Toolkit or the Teams
+developer portal), then re-run the script with its Application ID URI:
+
+```powershell
+./scripts/provision-agent-mcp-app.ps1 -TenantId "<guid>" -McpUrl "https://..." `
+    -SsoApplicationIdUri "<Application ID URI from the auth config>"
+```
+
+The full four-step flow is in [`agent/README.md`](agent/README.md#authentication).
 
 Prefer raw Azure CLI (for example in Cloud Shell)? The equivalent minimum is:
 
@@ -506,10 +518,18 @@ The manifests use `${{TOKEN}}` placeholders so no environment-specific value is 
 export AGENT_APP_ID="<your-stable-guid>"
 export AGENTLENS_MCP_URL="https://agentlens-mcp.<region>.azurecontainerapps.io/mcp"
 
+# omit for local development (auth: None); REQUIRED for production (auth: Entra SSO)
+export MCP_AUTH_REFERENCE_ID="<auth config ID>"
+
 node scripts/package-agent.mjs
 ```
 
 Output: `agent/build/agentlens-agent.zip` (gitignored).
+
+`auth` is a required property of the plugin runtime. With `MCP_AUTH_REFERENCE_ID` set,
+the packager rewrites it from `{"type":"None"}` to
+`{"type":"OAuthPluginVault","reference_id":"..."}` and prints which mode it packaged, so
+you cannot ship an unauthenticated endpoint by accident.
 
 ### Step 3 - sideload and verify
 

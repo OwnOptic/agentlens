@@ -9,6 +9,9 @@
   "runtimes": [
     {
       "type": "RemoteMCPServer",
+      "auth": {
+        "type": "None"
+      },
       "spec": {
         "url": "${{AGENTLENS_MCP_URL}}"
       },
