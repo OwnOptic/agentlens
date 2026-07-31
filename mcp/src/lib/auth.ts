@@ -68,12 +68,23 @@ export async function validateBearer(authorizationHeader: string | undefined): P
   const audience = config.auth.audience!;
   const tenantId = config.auth.tenantId!;
 
+  // Entra emits the audience in two forms depending on the token version:
+  //   v1.0 -> "api://<app-id>"
+  //   v2.0 -> "<app-id>"
+  // Accept both, otherwise valid tokens are rejected and the agent 401s in a
+  // way that looks like a misconfiguration. Microsoft's own reference server
+  // does the same.
+  const acceptedAudiences = audience.startsWith('api://')
+    ? [audience, audience.slice('api://'.length)]
+    : [audience, `api://${audience}`];
+
   const { payload } = await jwtVerify(token, getJwks(), {
-    audience,
+    audience: acceptedAudiences,
     issuer: [
       `https://login.microsoftonline.com/${tenantId}/v2.0`,
       `https://sts.windows.net/${tenantId}/`,
     ],
+    requiredClaims: ['exp', 'iat', 'aud', 'iss'],
   }).catch((err) => {
     throw new AuthError(`Token validation failed: ${err instanceof Error ? err.message : String(err)}`);
   });
