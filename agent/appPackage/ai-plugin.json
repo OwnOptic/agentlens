@@ -5,6 +5,7 @@
   "description_for_human": "Read-only governance data for every AI agent in your Microsoft 365 tenant.",
   "description_for_model": "Reads live, read-only governance data about the AI agents in the signed-in user's Microsoft 365 tenant: the inventory across Copilot Studio, M365 Agent Builder, Azure AI Foundry and Microsoft Fabric; Data Loss Prevention posture per environment; aggregate usage joined with real Azure spend; duplicate clusters and a consolidation plan; and a map of the estate. All operations are read-only and never modify the tenant.",
   "namespace": "agentlens",
+  "contact_email": "hello@e-margot.ch",
   "functions": [],
   "runtimes": [
     {
@@ -19,5 +20,17 @@
         "*"
       ]
     }
-  ]
+  ],
+  "capabilities": {
+    "conversation_starters": [
+      {
+        "title": "Sweep every agent store",
+        "text": "Sweep every agent store in my tenant and flag sprawl and orphans."
+      },
+      {
+        "title": "Governance and DLP posture",
+        "text": "What is my DLP and compliance posture across all agents?"
+      }
+    ]
+  }
 }
