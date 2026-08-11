@@ -97,6 +97,27 @@ than printing a hedged or zero one.
 Then test the second unhappy path, which is subtler: set *bogus* credentials.
 Tokens fail to acquire, and the tools must still refuse to report "0 agents".
 
+### Verifying the undocumented endpoint
+
+Per-agent consumption comes from an endpoint Microsoft does not document - it
+backs the admin center UI, and `src/connectors/consumption.ts` is written against
+a shape observed in one tenant. Before trusting a cost figure in a new tenant:
+
+```bash
+AZURE_TENANT_ID=... AZURE_CLIENT_ID=... AZURE_CLIENT_SECRET=... \
+PPAC_BILLING_POLICY_ID=... npm run verify:consumption
+```
+
+It prints the response SHAPE - field names, types, how many rows carry each -
+and diffs it against what the connector reads. The only value it prints is the
+set of distinct `modelMeter` strings, because pricing turns on the literal
+`premium` and a change there would silently misprice every agent. Exit 0 means
+the shape matches, 1 a mismatch, 2 it could not check.
+
+If it reports unexpected fields, read them: Copilot Studio billing has been
+moving toward billed *sessions*, and a new field may be the current unit while
+`messageCount` quietly becomes legacy.
+
 Before shipping a change to a tool, verify it end to end through the actual agent
 in Copilot, not only through Inspector.
 

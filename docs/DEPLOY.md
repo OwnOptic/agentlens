@@ -75,6 +75,18 @@ no billing policy, and no API exposes per-agent consumption for it - leave the
 variable unset and the tools report per-agent cost as unavailable rather than
 zero.
 
+Then confirm the endpoint behind it actually looks the way this code expects -
+it is undocumented, so this takes ten seconds and saves a wrong number:
+
+```bash
+AZURE_TENANT_ID=<guid> AZURE_CLIENT_ID=<reader> AZURE_CLIENT_SECRET=<secret> \
+PPAC_BILLING_POLICY_ID=<policy> npm run verify:consumption
+```
+
+Run it with `PPAC_BILLING_POLICY_ID` unset and it lists the policy IDs it can
+see, which is the easiest way to find yours. It prints field names and types
+only - no tenant data - so the output is safe to paste into an issue.
+
 **2f. Application User in each Dataverse environment.** Power Platform admin
 center → Environment → Settings → Users + permissions → Application users → New
 app user → AgentLens-Reader → assign a read role. List those org URLs in

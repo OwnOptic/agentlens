@@ -65,7 +65,8 @@ An administrator makes retire-or-keep decisions from this output, and a security
 reviewer will ask what it can change. Both collapse if a single number is
 invented. So:
 
-- Every figure comes from an API response in the same call.
+- Every figure comes from an API response in the same call — or is derived from
+  one by arithmetic whose inputs and method ship alongside it.
 - A source that cannot be read returns `not_connected` or `partial`, naming the
   source, the reason, and the fix.
 - **Zero and unknown are different answers.** A store that could not be read is
@@ -104,6 +105,17 @@ prepaid capacity is absorbing consumption that never reaches an invoice.
 Per-agent consumption needs `PPAC_BILLING_POLICY_ID`, and it covers
 pay-as-you-go environments only. Agents on prepaid capacity packs are reported
 as **unmeasured, not free**.
+
+That endpoint is undocumented — it backs the admin center UI — so check it
+against your tenant before trusting a cost figure:
+
+```bash
+PPAC_BILLING_POLICY_ID=<policy> npm run verify:consumption
+```
+
+It diffs the live response shape against what the connector reads and prints
+field names and types only, never your data. Leave the policy ID out and it
+lists the ones it can see.
 
 ---
 
