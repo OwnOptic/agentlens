@@ -19,8 +19,10 @@ MCP server  (src/)                       Azure Container App, scale-to-zero
 │ Copilot Studio,      │ owner names,           │ environments, and       │
 │ Agent Builder        │ Agent 365 registry     │ governance: DLP policies│
 ├──────────────────────┼────────────────────────┴─────────────────────────┤
-│ Dataverse            │ Azure Cost Management                            │
-│ aggregate KPIs only  │ real billed spend + Microsoft's forecast         │
+│ Dataverse            │ Power Platform licensing                         │
+│ aggregate KPIs only  │ per-agent messages + billed sessions, capacity   │
+├──────────────────────┼──────────────────────────────────────────────────┤
+│ Azure Cost Mgmt      │ real billed spend + Microsoft's forecast         │
 └──────────────────────┴──────────────────────────────────────────────────┘
 ```
 
@@ -96,17 +98,36 @@ it read and what it could not. The agent's instructions require it to relay a
 2. **Read usage** from Dataverse `msdyn_conversationkpis`, per configured
    environment, aggregated by agent and day. Per-environment failures are
    collected, not swallowed.
-3. **Read spend** from Azure Cost Management for the scope: month-to-date actual,
-   plus Microsoft's own forecast when the forecast API answers.
-4. **Cluster** duplicates by normalised name stem.
-5. **Classify** each agent — promote / improve / consolidate / retire — from
+3. **Read consumption** from the Power Platform licensing API: messages and
+   billed sessions per agent per day, split by feature. This is the data behind
+   the Copilot Studio pages in the admin center.
+4. **Read billed spend** from Azure Cost Management for the scope: month-to-date
+   actual, plus Microsoft's own forecast when the forecast API answers.
+5. **Price** the consumption at the rate from `src/domain/rates.ts`, per row so
+   the premium meter is not charged at the standard rate. The rate and its
+   source are attached to the result.
+6. **Cluster** duplicates by normalised name stem.
+7. **Classify** each agent — promote / improve / consolidate / retire — from
    sessions, escalation rate and duplicate status. An agent with no readable
    usage gets `null` and a rationale saying so.
-6. **Report**: `ok` if both sides were read, `partial` if one was, never a blend.
+8. **Report**: `ok` if every side was read, `partial` otherwise, never a blend.
 
-Cost is reported at the scope level only. Azure does not attribute spend to an
-individual agent, so there is no per-agent figure to report — the tool says this
-explicitly in `costAttributionNote` so the model does not fill the gap itself.
+### Why there are two cost numbers
+
+Metered consumption priced at a rate is a **derived** figure. The Cost
+Management total is a **billed** figure. They are reported separately and never
+summed: prepaid capacity absorbs consumption that never reaches an invoice, so
+adding them double-counts. A gap between the two is usually that capacity, which
+makes the gap itself worth reading.
+
+Per-agent consumption is addressed by pay-as-you-go billing policy, so agents in
+environments on prepaid capacity packs are absent from it. They are reported as
+unmeasured rather than as costing nothing — the same zero-versus-unknown rule
+that governs the sweep.
+
+`src/domain/rates.ts` is the only place a price exists in this codebase. That is
+deliberate: one file to audit, and every figure it produces carries the rate and
+its provenance so the multiplier can be inspected and disagreed with.
 
 ## State
 

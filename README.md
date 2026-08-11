@@ -43,7 +43,7 @@ Five tools, all read-only.
 |---|---|---|
 | `sweep_inventory` | Every agent across the four stores, with owners, orphans and duplicate clusters | Azure Resource Graph, Microsoft Graph, Power Platform admin API |
 | `dlp_posture` | Which environments no DLP policy covers, and what that exposes | Power Platform governance + admin APIs |
-| `value_and_cost` | Which agents are actually used, what the tenant really spends, and a verdict per agent | Dataverse (aggregate), Azure Cost Management |
+| `value_and_cost` | Which agents are actually used, what each one consumes and costs, what Azure invoiced, and a verdict per agent | Dataverse (aggregate), Power Platform licensing, Azure Cost Management |
 | `consolidation_plan` | Duplicate clusters, which agent to keep, and a plan you can send to owners | derived from the sweep |
 | `agent_map` | A Mermaid diagram of the estate | derived from the sweep |
 
@@ -73,17 +73,37 @@ invented. So:
   node for the same reason.
 - Nothing is estimated to make output look complete.
 
-Three consequences you might otherwise read as missing features:
+Two consequences you might otherwise read as missing features:
 
-- **No per-agent cost.** Azure Cost Management does not attribute spend to an
-  individual agent. Dividing the tenant total by the agent count would be an
-  invention, so the real total is reported alongside the agents with zero usage —
-  which is the actionable finding anyway.
-- **No saving figure in the consolidation plan.** Same reason. It reports how
-  many agents can be merged away, which is a real number.
 - **No sample or demo mode.** With no credentials the agent says every source is
   not connected. That is the honest answer, and it is the first thing worth
   testing.
+- **A figure is never separated from how it was produced.** Where a number is
+  derived rather than read — per-agent cost, month-end projections — the inputs
+  and the method travel with it in the same payload. See below.
+
+### Two kinds of cost, kept apart
+
+`value_and_cost` reports both, and never adds them together:
+
+| | Where it comes from | What it is |
+|---|---|---|
+| **Billed** | Azure Cost Management | What Azure actually invoiced, at subscription or billing scope. A fact about your bill |
+| **Consumption** | Power Platform licensing API | Messages and billed sessions **per agent** — the data behind the Copilot Studio pages in the admin center. Priced at a stated rate to give a per-agent cost |
+
+The rate is the only price in the codebase, and it is always visible. Set
+`COPILOT_RATE_STANDARD` / `COPILOT_RATE_PREMIUM` from your own price sheet and
+every figure becomes yours; leave them unset and Microsoft's published list
+price is used, labelled as such with the date it was last checked. Either way
+the rate and its source ship inside the result, so the multiplier can be
+inspected and disagreed with.
+
+A gap between the two is informative rather than a bug — it usually means
+prepaid capacity is absorbing consumption that never reaches an invoice.
+
+Per-agent consumption needs `PPAC_BILLING_POLICY_ID`, and it covers
+pay-as-you-go environments only. Agents on prepaid capacity packs are reported
+as **unmeasured, not free**.
 
 ---
 
@@ -249,7 +269,8 @@ wrong number.
 | **Power Platform Administrator** directory role | Copilot Studio + Agent Builder sweep, environment list | ARG returns zero rows with no error — indistinguishable from an empty tenant, which is why the tool checks the role explicitly |
 | **Reader** on the subscription | Azure Resource Graph queries | The Power Platform store reports not connected |
 | **Graph `User.Read.All`** (admin-consented) | Owner names instead of object IDs | Every agent looks like an orphan |
-| **Cost Management Reader** on the subscription | Real spend and forecast in `value_and_cost` | Usage is returned, cost is marked not connected — never blended |
+| **Cost Management Reader** on the subscription | Billed spend and forecast in `value_and_cost` | Usage is returned, billed spend is marked not connected — never blended |
+| **A pay-as-you-go billing policy** in `PPAC_BILLING_POLICY_ID` | Per-agent messages, per-agent cost, and the consolidation saving | No per-agent cost anywhere, and the consolidation brief omits its savings line entirely |
 | **`New-PowerAppManagementApp`** for the reader app | DLP policy read | `dlp_posture` returns not connected with the exact cmdlet. A 403 is never reported as "no policies exist" |
 | **Application User** in each Dataverse environment | Aggregate session/deflection/escalation KPIs | Those environments are listed as unreadable, not as zero usage |
 | **`CopilotPackages.Read.All`** (Agent 365 licence) | The M365 agent registry store | That one store reports not connected; the rest of the sweep still returns |
@@ -308,7 +329,9 @@ missing shows up as a not-connected source with a fix. See
 | `MCP_TENANT_ID` / `MCP_AUDIENCE` | Inbound token validation. Both blank = unauthenticated |
 | `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | The reader service principal |
 | `AZURE_SUBSCRIPTION_ID` | Scope for Resource Graph and Cost Management |
-| `AZURE_COST_SCOPE` | Optional. Read cost at a billing account or management group instead |
+| `AZURE_COST_SCOPE` | Optional. Read billed cost at a billing account or management group instead |
+| `PPAC_BILLING_POLICY_ID` | Pay-as-you-go billing policy. Unlocks per-agent consumption and cost |
+| `COPILOT_RATE_STANDARD` / `COPILOT_RATE_PREMIUM` / `COPILOT_RATE_CURRENCY` | Your message rates. Unset falls back to published list price, labelled as such |
 | `DATAVERSE_ORG_URLS` | Comma-separated org URLs for aggregate usage |
 | `FOUNDRY_PROJECT_ENDPOINT` | Optional. Include Azure AI Foundry agents in the sweep |
 | `KEY_VAULT_URI` | Optional. Read `AZURE_CLIENT_SECRET` from Key Vault instead |

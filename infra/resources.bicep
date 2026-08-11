@@ -10,6 +10,10 @@ param azureClientId string
 param azureClientSecret string
 param azureSubscriptionId string
 param dataverseOrgUrls string
+param ppacBillingPolicyId string
+param copilotRateStandard string
+param copilotRatePremium string
+param copilotRateCurrency string
 param mcpTenantId string
 param mcpAudience string
 
@@ -126,6 +130,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
               { name: 'AZURE_CLIENT_ID', value: azureClientId }
               { name: 'AZURE_SUBSCRIPTION_ID', value: azureSubscriptionId }
               { name: 'DATAVERSE_ORG_URLS', value: dataverseOrgUrls }
+              { name: 'PPAC_BILLING_POLICY_ID', value: ppacBillingPolicyId }
+              { name: 'COPILOT_RATE_STANDARD', value: copilotRateStandard }
+              { name: 'COPILOT_RATE_PREMIUM', value: copilotRatePremium }
+              { name: 'COPILOT_RATE_CURRENCY', value: copilotRateCurrency }
             ],
             empty(azureClientSecret)
               ? []
