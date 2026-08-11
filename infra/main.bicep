@@ -1,201 +1,87 @@
-// main.bicep - AgentLens infrastructure entry point
-// Scope: resource group (targetScope = 'resourceGroup')
-// Deploys: App Service Plan + Web App (Node 20, system-assigned identity)
-//          Azure Key Vault (RBAC mode, purge protection)
-//          Role assignment: Key Vault Secrets User -> webapp identity
-//          Optionally: Azure PostgreSQL Flexible Server (deployPostgres=true)
+// AgentLens - infrastructure entry point.
+//
+// Deploys the MCP server that backs the declarative agent:
+//   Container Registry  (holds the image)
+//   Log Analytics       (container logs)
+//   Container Apps env  + Container App, scale-to-zero
+//
+// Scale-to-zero matters here: a governance agent is asked a question a few
+// times a week, not continuously, so the app idles at zero replicas and costs
+// nothing between questions.
 //
 // Usage:
-//   azd up                  (recommended - uses azure.yaml)
-//   az deployment group create \
-//     --resource-group <rg> \
-//     --template-file infra/main.bicep \
-//     --parameters baseName=agentlens-prod \
-//                  azureTenantId=<tenant-id> \
-//                  azureClientId=<sp-client-id> \
-//                  azureAdClientId=<webapp-client-id>
+//   azd up
+// or:
+//   az deployment sub create --location <region> --template-file infra/main.bicep \
+//     --parameters environmentName=agentlens location=<region>
 
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
-// ---------------------------------------------------------------------------
-// Parameters
-// ---------------------------------------------------------------------------
+@minLength(1)
+@maxLength(30)
+@description('Name of the environment. Used to name the resource group and resources.')
+param environmentName string
 
-@description('Azure region for all resources. Defaults to the resource group location.')
-param location string = resourceGroup().location
+@minLength(1)
+@description('Primary location for all resources.')
+param location string
 
-@description('Base name used for all resource names (e.g. agentlens-prod). Max 20 chars; lowercase letters and hyphens only.')
-@maxLength(20)
-param baseName string
+@description('Entra tenant ID the reader service principal belongs to.')
+param azureTenantId string = ''
 
-@description('Entra (AAD) tenant ID for the target tenant')
-param azureTenantId string
+@description('AgentLens-Reader application (client) ID.')
+param azureClientId string = ''
 
-@description('Service principal (AgentLens-Reader) client ID')
-param azureClientId string
-
-@description('Webapp SSO app registration (AgentLens-WebApp) client ID')
-param azureAdClientId string
-
-@description('Comma-separated Dataverse org URLs to scan (e.g. https://org.crm.dynamics.com)')
-param agentLensOrgUrls string = ''
-
-@description('Supabase project URL (non-secret). Leave empty when using deployPostgres=true.')
-param supabaseUrl string = ''
-
-@description('Azure OpenAI endpoint, e.g. https://your-resource.openai.azure.com (non-secret). Powers the Ask AI page.')
-param azureOpenAiEndpoint string = ''
-
-@description('Azure OpenAI chat deployment name, e.g. gpt-4o (non-secret).')
-param azureOpenAiDeployment string = 'gpt-4o'
-
-@description('Azure OpenAI API version (non-secret).')
-param azureOpenAiApiVersion string = '2024-08-01-preview'
-
-@description('App Service Plan SKU. F1 = Free ($0, no always-on - for testing/demo). B1 = Basic (~$13/mo). S1 = Standard.')
-@allowed([
-  'F1'
-  'B1'
-  'B2'
-  'S1'
-])
-param appServiceSku string = 'F1'
-
-@description('Whether to deploy Azure PostgreSQL Flexible Server (true = client tenant; false = use Supabase). See docs/DEPLOY.md D-021.')
-param deployPostgres bool = false
-
-@description('PostgreSQL admin password. Required when deployPostgres=true. Store in Key Vault after deployment.')
+@description('AgentLens-Reader client secret. Stored as a Container App secret.')
 @secure()
-param pgAdminPassword string = ''
+param azureClientSecret string = ''
 
-@description('Deploy an Application Insights component for observability. Set false to skip (e.g. for cost-sensitive dev deployments).')
-param deployAppInsights bool = true
+@description('Subscription ID to read Azure Cost Management for. Defaults to this one.')
+param azureSubscriptionId string = subscription().subscriptionId
 
-@description('Object ID of the Entra principal to add as Postgres AAD admin (e.g. the webapp managed identity principal ID). Leave empty to skip.')
-param pgAadAdminObjectId string = ''
+@description('Comma-separated Dataverse org URLs to read aggregate usage from.')
+param dataverseOrgUrls string = ''
 
-@description('Display name for the Postgres AAD admin principal. Must match the Entra display name exactly.')
-param pgAadAdminName string = 'agentlens-webapp'
+@description('Tenant ID used to validate INBOUND Copilot tokens. Leave empty to run unauthenticated (local/dev only).')
+param mcpTenantId string = ''
 
-// ---------------------------------------------------------------------------
-// Deployment order is LINEAR (no cycles):
-//   1. kv             - Key Vault (depends on nothing)
-//   2. appInsights    - Application Insights + Log Analytics workspace (optional, depends on nothing)
-//   3. webApp         - Web App + managed identity (depends on kv.keyVaultUri + appInsights connection string)
-//   4. kvRole         - grants the identity access to the vault (depends on kv + webApp)
-// ---------------------------------------------------------------------------
+@description('Expected audience of INBOUND Copilot tokens, e.g. api://<agentlens-mcp-app-id>. Leave empty to run unauthenticated (local/dev only).')
+param mcpAudience string = ''
 
-// ---------------------------------------------------------------------------
-// Log Analytics Workspace (backing store for App Insights workspace-based component)
-// ---------------------------------------------------------------------------
+var tags = { 'azd-env-name': environmentName }
+var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (deployAppInsights) {
-  name: 'log-${baseName}'
+resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
+  name: 'rg-${environmentName}'
   location: location
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: 30
-  }
+  tags: tags
 }
 
-// ---------------------------------------------------------------------------
-// Application Insights (workspace-based, classic is deprecated)
-// ---------------------------------------------------------------------------
-
-resource appInsights 'Microsoft.Insights/components@2020-02-02' = if (deployAppInsights) {
-  name: 'appi-${baseName}'
-  location: location
-  kind: 'web'
-  properties: {
-    Application_Type: 'web'
-    // Workspace-based component: data stored in Log Analytics (no classic ingestion key)
-    WorkspaceResourceId: deployAppInsights ? logAnalyticsWorkspace.id : ''
-    publicNetworkAccessForIngestion: 'Enabled'
-    publicNetworkAccessForQuery: 'Enabled'
-  }
-}
-
-module kv 'modules/keyvault.bicep' = {
-  name: 'kv-deploy'
+module resources 'resources.bicep' = {
+  name: 'resources'
+  scope: rg
   params: {
     location: location
-    baseName: baseName
-  }
-}
-
-module webApp 'modules/webapp.bicep' = {
-  name: 'webapp-deploy'
-  params: {
-    location: location
-    baseName: baseName
-    keyVaultUri: kv.outputs.keyVaultUri
+    tags: tags
+    resourceToken: resourceToken
     azureTenantId: azureTenantId
     azureClientId: azureClientId
-    azureAdClientId: azureAdClientId
-    agentLensOrgUrls: agentLensOrgUrls
-    supabaseUrl: supabaseUrl
-    azureOpenAiEndpoint: azureOpenAiEndpoint
-    azureOpenAiDeployment: azureOpenAiDeployment
-    azureOpenAiApiVersion: azureOpenAiApiVersion
-    deployPostgres: deployPostgres
-    // Pass connection string when App Insights is deployed; empty string = disabled.
-    // The null-coalescing fallback (appInsights?.properties.ConnectionString ?? '')
-    // avoids Bicep BCP318 when deployAppInsights=false and appInsights is null.
-    appInsightsConnectionString: appInsights.?properties.ConnectionString ?? ''
-    appServiceSku: appServiceSku
+    azureClientSecret: azureClientSecret
+    azureSubscriptionId: azureSubscriptionId
+    dataverseOrgUrls: dataverseOrgUrls
+    mcpTenantId: mcpTenantId
+    mcpAudience: mcpAudience
   }
 }
 
-// Role assignment AFTER both kv and webApp exist - this is what breaks the cycle.
-module kvRole 'modules/kv-role.bicep' = {
-  name: 'kv-role-deploy'
-  params: {
-    keyVaultName: kv.outputs.keyVaultName
-    principalId: webApp.outputs.principalId
-  }
-}
+// azd reads these outputs.
+output AZURE_LOCATION string = location
+output AZURE_RESOURCE_GROUP string = rg.name
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = resources.outputs.registryLoginServer
+output AZURE_CONTAINER_REGISTRY_NAME string = resources.outputs.registryName
 
-module postgres 'modules/postgres.bicep' = {
-  name: 'postgres-deploy'
-  params: {
-    location: location
-    baseName: baseName
-    deployPostgres: deployPostgres
-    pgAdminPassword: pgAdminPassword
-    pgAadAdminObjectId: pgAadAdminObjectId
-    pgAadAdminName: pgAadAdminName
-  }
-}
+@description('Paste this into AGENTLENS_MCP_URL when packaging the agent.')
+output AGENTLENS_MCP_URL string = resources.outputs.mcpUrl
 
-// ---------------------------------------------------------------------------
-// Outputs
-// ---------------------------------------------------------------------------
-
-@description('URL of the deployed AgentLens application')
-output appUrl string = 'https://${webApp.outputs.hostName}'
-
-@description('Azure Key Vault URI - set as KEY_VAULT_URI in .env.local for local dev pointing at this vault')
-output keyVaultUri string = kv.outputs.keyVaultUri
-
-@description('Key Vault name - use with: az keyvault secret set --vault-name <name> --name <secret> --value <value>')
-output keyVaultName string = kv.outputs.keyVaultName
-
-@description('Web app resource name')
-output webAppName string = webApp.outputs.webAppName
-
-@description('Webapp system-assigned identity principal ID (for additional role assignments if needed)')
-output webAppPrincipalId string = webApp.outputs.principalId
-
-@description('DATABASE_URL hint for Azure PostgreSQL (empty when deployPostgres=false)')
-output databaseUrlHint string = postgres.outputs.databaseUrlHint
-
-@description('PostgreSQL server FQDN (empty when deployPostgres=false)')
-output pgServerFqdn string = postgres.outputs.pgServerFqdn
-
-@description('Application Insights resource name (empty when deployAppInsights=false)')
-output appInsightsName string = deployAppInsights ? appInsights.name : ''
-
-@description('Log Analytics workspace resource name (empty when deployAppInsights=false)')
-output logAnalyticsWorkspaceName string = deployAppInsights ? logAnalyticsWorkspace.name : ''
+@description('Health endpoint - confirms whether inbound auth is on.')
+output AGENTLENS_HEALTH_URL string = resources.outputs.healthUrl

@@ -4,12 +4,11 @@
     declarative agent to call the AgentLens MCP server with Entra SSO.
 
 .DESCRIPTION
-    This is the THIRD app registration, in addition to the two created by
-    scripts/provision-app-registrations.ps1:
+    The second of the two app registrations AgentLens uses:
 
       A) AgentLens-Reader  - the data service principal (reads the five APIs).
-      B) AgentLens-WebApp  - Entra SSO for the Next.js console (optional).
-      C) AgentLens-MCP     - THIS SCRIPT. Secures the MCP endpoint that the
+                             Created by scripts/provision-reader-app.ps1.
+      B) AgentLens-MCP     - THIS SCRIPT. Secures the MCP endpoint that the
                              declarative agent calls.
 
     The agent never touches tenant data directly. The chain is:
@@ -76,7 +75,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------------------
-# Helpers (same conventions as provision-app-registrations.ps1)
+# Helpers (same conventions as provision-reader-app.ps1)
 # ---------------------------------------------------------------------------
 
 function Write-Section([string]$Title) {
@@ -167,10 +166,10 @@ $mcpOrigin = ([System.Uri]$McpUrl).GetLeftPart([System.UriPartial]::Authority)
 Write-Done "MCP origin $mcpOrigin"
 
 # ---------------------------------------------------------------------------
-# (C) AgentLens-MCP
+# (B) AgentLens-MCP
 # ---------------------------------------------------------------------------
 
-Write-Section "(C) AgentLens-MCP - SSO gate for the declarative agent"
+Write-Section "(B) AgentLens-MCP - SSO gate for the declarative agent"
 
 $mcpAppName = "AgentLens-MCP"
 $existing = Find-AppByName $mcpAppName
@@ -323,7 +322,7 @@ Write-Host "   Or run:  az ad app permission admin-consent --id $mcpAppId" -Fore
 Write-Host ""
 Write-Host "6. REMEMBER: this app grants NO data access" -ForegroundColor White
 Write-Host "   All tenant read permissions live on AgentLens-Reader." -ForegroundColor Gray
-Write-Host "   Run scripts/provision-app-registrations.ps1 if you have not already." -ForegroundColor Gray
+Write-Host "   Run scripts/provision-reader-app.ps1 if you have not already." -ForegroundColor Gray
 Write-Host ""
 
 Write-Section "Environment block (for the MCP server)"

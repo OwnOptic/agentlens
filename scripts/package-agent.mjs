@@ -21,11 +21,11 @@
  *                       https://learn.microsoft.com/microsoft-365/copilot/extensibility/plugin-authentication-entra-sso
  *
  * Usage:
- *   AGENT_APP_ID=<guid> AGENTLENS_MCP_URL=https://... node scripts/package-agent.mjs
+ *   AGENT_APP_ID=<guid> AGENTLENS_MCP_URL=https://... npm run package:agent
  *
- * Requires Node 18+ (no external dependencies beyond archiver, which is only
- * needed here; if archiver is unavailable the script falls back to printing
- * the staged folder so you can zip it manually).
+ * Requires Node 20+. The only dependency is archiver (a dev dependency, so
+ * `npm install` covers it); without it the script stages the folder and tells
+ * you to zip it yourself.
  */
 
 import { mkdir, readdir, readFile, writeFile, copyFile, rm } from "node:fs/promises";
@@ -44,7 +44,7 @@ const missing = required.filter((k) => !process.env[k]);
 if (missing.length) {
   console.error(`\nMissing required environment variable(s): ${missing.join(", ")}\n`);
   console.error("Example:");
-  console.error("  AGENT_APP_ID=<guid> AGENTLENS_MCP_URL=https://your-mcp-host/mcp node scripts/package-agent.mjs\n");
+  console.error("  AGENT_APP_ID=<guid> AGENTLENS_MCP_URL=https://your-mcp-host/mcp npm run package:agent\n");
   process.exit(1);
 }
 
@@ -109,7 +109,7 @@ try {
 } catch {
   console.log(`\nStaged package ready: ${stageDir}`);
   console.log("archiver is not installed, so the .zip was not created.");
-  console.log("Either run:  npm i -D archiver");
+  console.log("Either run:  npm install");
   console.log("or zip the CONTENTS of that folder (not the folder itself) manually.\n");
   process.exit(0);
 }

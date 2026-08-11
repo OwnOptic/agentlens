@@ -1,548 +1,123 @@
-# AgentLens v2 Architecture
+# Architecture
 
-Deep dive into the system design, data flow, and connectors that power AgentLens.
-
----
-
-## System Overview
+## The shape of it
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          AgentLens (Next.js App)                             │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  Client Layer (React + TailwindCSS)                                  │  │
-│  │  • Dashboard: Overview, Inventory, Sprawl, Cost, Alerts              │  │
-│  │  • Governance UI: Compliance, Risky Patterns, Maturity, Gates        │  │
-│  │  • Tools: Lifecycle, Maker View, Ask (AI), Settings                  │  │
-│  │  • Real-time updates via WebSocket (optional)                        │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                 │                                           │
-│  ┌──────────────────────────────┴───────────────────────────────────────┐  │
-│  │  API Routes (Next.js /api/*)                                         │  │
-│  │  • /api/agents         → ConnectorRegistry.argInventory.listAgents   │  │
-│  │  • /api/metrics        → ConnectorRegistry.cost.getDailyMetrics      │  │
-│  │  • /api/capacity       → ConnectorRegistry.cost.getCapacity          │  │
-│  │  • /api/compliance     → rules + violation engine                    │  │
-│  │  • /api/maturity       → controls + scoring                          │  │
-│  │  • /api/gates          → policy evaluation + decisions               │  │
-│  │  • /api/kpis           → ConnectorRegistry.kpis.getAggregates        │  │
-│  │  • /api/health         → ConnectorRegistry.appInsights.getHealth     │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                 │                                           │
-└─────────────────────────────────┼───────────────────────────────────────────┘
-                                  │
-                ┌─────────────────┼─────────────────┐
-                │                 │                 │
-                ▼                 ▼                 ▼
-        ┌─────────────────┐ ┌──────────┐ ┌──────────────────┐
-        │ Azure Resource  │ │ PPAC     │ │ Dataverse        │
-        │ Graph (ARG)     │ │ Licensing│ │ (on-demand deep  │
-        │                 │ │ API      │ │ scans only)      │
-        │ PowerPlatform   │ │ (+ CSV   │ │                  │
-        │ Resources Query │ │ fallback)│ │ • Agent detail   │
-        │                 │ │          │ │ • Channels       │
-        │ • Agents        │ │ Per-agent│ │ • Connectors     │
-        │ • Owners        │ │ daily    │ │ • Auth config    │
-        │ • Environments  │ │ credits  │ │ • Skills         │
-        │ • Sharing       │ │ • Feature│ │                  │
-        │                 │ │   breakdown         │
-        └─────────────────┘ │ • Feature breakdown│ │
-                            │                  │
-                            └──────────────────┘
-
-                    ┌──────────────────────────────┐
-                    │ App Insights / CS Analytics  │
-                    │ • Error rate, latency        │
-                    │ • Session health             │
-                    │ • Deflection / escalation    │
-                    └──────────────────────────────┘
-
-                    ┌──────────────────────────────┐
-                    │ Supabase (Optional)          │
-                    │ • Metrics time-series        │
-                    │ • Alert audit log            │
-                    │ • Settings (tenant-specific) │
-                    └──────────────────────────────┘
+Microsoft 365 Copilot
+   │  user asks a question
+   ▼
+declarative agent  (agent/appPackage)
+   │  instructions + 5 conversation starters
+   │  action -> RemoteMCPServer, tools discovered at runtime
+   ▼
+MCP server  (src/)                       Azure Container App, scale-to-zero
+   │  inbound: validates the Entra SSO token Copilot presents
+   │  outbound: AgentLens-Reader, client credentials
+   ▼
+┌──────────────────────┬────────────────────────┬─────────────────────────┐
+│ Azure Resource Graph │ Microsoft Graph        │ Power Platform admin    │
+│ Copilot Studio,      │ owner names,           │ environments, and       │
+│ Agent Builder        │ Agent 365 registry     │ governance: DLP policies│
+├──────────────────────┼────────────────────────┴─────────────────────────┤
+│ Dataverse            │ Azure Cost Management                            │
+│ aggregate KPIs only  │ real billed spend + Microsoft's forecast         │
+└──────────────────────┴──────────────────────────────────────────────────┘
 ```
 
----
+Two identities, deliberately separate:
 
-## Backbone: Azure Resource Graph (ARG)
+- **AgentLens-MCP** guards the door. It only proves the caller is Copilot acting
+  for a signed-in user in your tenant.
+- **AgentLens-Reader** does the reading. It holds every data permission, and
+  nothing else in the system does.
 
-**Primary inventory source.** Replaces v1's per-environment Dataverse polling.
+The server itself holds no permissions. Compromising it gains an attacker
+whatever the reader can read — which is read-only, and audited by Entra.
 
-### Why ARG?
+## Layers
 
-- **Single query** returns all agents across the entire tenant in <1s
-- **Owner resolution** included (no separate Graph calls needed for most agents)
-- **Sharing metadata** (scope: tenant, environment, teams channel)
-- **No Dataverse import** into client environments required
-- **Public Microsoft endpoint**, no custom connector provisioning
+| Layer | Path | Rule |
+|---|---|---|
+| Transport | `src/index.ts` | Streamable HTTP at `/mcp` for Copilot, stdio for Inspector. Stateless: a fresh server and transport per request, so it scales horizontally and restarts cleanly from zero |
+| Inbound auth | `src/lib/auth.ts` | Validates the JWT audience and issuer, and that the caller is the Microsoft Enterprise token store. Blank audience = disabled, development only |
+| Credentials | `src/lib/tokens.ts` | The only place secrets are touched. MSAL client credentials, one cached token per audience, expiry from MSAL rather than a guessed TTL |
+| Connectors | `src/connectors/` | One file per upstream API. Each returns data **or a reason**, never a silent empty |
+| Domain | `src/domain/` | Pure derivation over data already read. No I/O, so it can never invent a source |
+| Tools | `src/tools/` | Compose connectors into an answer and report every source's state |
 
-### Query Pattern
+## Why there is no single inventory API
 
-```kql
-resources
-| where type == 'microsoft.copilotstudio/agents'
-| project
-    botId = properties.botId,
-    name = name,
-    environment = tolower(split(id, '/')[4]),
-    ownerPrincipalId = properties.ownerPrincipalId,
-    createdOn = properties.createdOn,
-    modifiedOn = properties.modifiedOn,
-    state = properties.state,
-    properties = properties
-| join kind=leftouter (
-    resources
-    | where type == 'microsoft.copilotstudio/bots'
-    | project
-        botId = properties.botId,
-        lastActivity = properties.lastActivity,
-        channels = properties.channels,
-        modelMeter = properties.modelMeter
-  ) on botId
-```
+There is no one endpoint that lists the AI agents in a Microsoft tenant. They
+live in four stores, each with its own API, its own admin role, and its own
+failure mode:
 
-### Data Returned
+| Store | API | Needs |
+|---|---|---|
+| Copilot Studio + Agent Builder | Azure Resource Graph, `PowerPlatformResources` | Reader on the subscription **and** Power Platform Administrator |
+| M365 agent registry | Graph `copilot/admin/catalog/packages` (beta) | AI Administrator + `CopilotPackages.Read.All`, Agent 365 licensed |
+| Azure AI Foundry | Foundry project REST `/agents` | Access to the project |
+| Microsoft Fabric | Fabric Admin REST `/admin/items?type=DataAgent` | Fabric Administrator |
 
-- `botId`, `name`, `state`, `createdOn`, `modifiedOn`
-- `ownerPrincipalId` (resolved to email/name via Graph)
-- `lastActivity`, `channels`, `modelMeter`
-- Environment path (enables grouping by environment)
+`src/connectors/discovery.ts` queries all four under `Promise.allSettled`, each
+with its own token acquisition **inside** its own try/catch. One unreachable
+store degrades that store alone; the rest of the sweep still returns.
 
----
+The subtlest trap is here: **Azure Resource Graph returns an empty result set,
+not a 403, when the Power Platform Administrator role is missing.** A tenant with
+no agents and a tenant you are not allowed to see look identical on the wire.
+That is why the sweep reports per-store status separately from per-store counts,
+and why a store that was not read carries `agentCount: null` rather than `0`.
 
-## Connectors: The Data Layer
+## The result contract
 
-AgentLens is built on a **connector pattern** — all data access goes through typed interfaces in `lib/connectors/interfaces.ts`. Each page/feature receives a `ConnectorRegistry` with 6 pluggable connectors:
+Every tool returns a `ToolResult` (`src/lib/result.ts`):
 
-### 1. ArgInventory Connector
-
-**Interface:**
 ```ts
-interface ArgInventoryConnector {
-  listAgents(): Promise<Agent[]>;
-  listEnvironments(): Promise<Environment[]>;
+{
+  status: 'ok' | 'partial' | 'not_connected' | 'error',
+  summary: string,           // may be quoted by the model; states no unread figure
+  data?: T,                  // absent when nothing could be read
+  sources: SourceReport[],   // per-source connected / partial / not_connected + why
+  remediation?: string       // the actual next step
 }
 ```
 
-**Implementation:**
-- Calls Azure Resource Graph with the above KQL query
-- Returns all agents + environments in the tenant
-- Caches for 5 minutes (configurable)
-
-**Where used:**
-- Inventory page
-- Sprawl detection (agents in default environment)
-- Agent detail pages
-
----
-
-### 2. Cost Connector
-
-**Interface:**
-```ts
-interface CostConnector {
-  getDailyMetrics(orgUrl: string): Promise<AgentMetricDaily[]>;
-  getCapacity(): Promise<Capacity[]>;
-}
-```
-
-**Implementation:**
-- **getDailyMetrics()**: Calls PPAC Licensing API for per-agent daily credits
-  - Returns: `messageCount`, `sessionCount`, `estimatedCost`
-  - **Feature breakdown** (v2 new): `generativeAnswers`, `agentActions`, `agentFlows`, `textTools`
-  - **Projected monthly**: extrapolates current daily run rate to 30 days
-  - **Fallback**: CSV export from Copilot Studio analytics if API is unavailable
-- **getCapacity()**: Queries Power Platform capacity dashboard
-  - Returns: `creditLimit`, `creditUsed`, `pct`, `overage` per environment
-
-**Where used:**
-- Cost page (daily trends, per-agent cost)
-- Capacity page (overage detection)
-- Alerts (budget breach detection)
-
----
-
-### 3. Graph Connector
-
-**Interface:**
-```ts
-interface GraphConnector {
-  resolveOwners(ids: string[]): Promise<Map<string, { name: string; email: string }>>;
-}
-```
-
-**Implementation:**
-- Batches Microsoft Graph calls to resolve Entra user/service principal display names and emails
-- Returns a map keyed by object ID
-- Missing IDs are omitted (no null entries)
-
-**Where used:**
-- Inventory page (agent owner name/email)
-- Compliance violations (assigned to person/team)
-- Reporting (stakeholder identification)
-
----
-
-### 4. DataverseDeepScan Connector
-
-**Interface:**
-```ts
-interface DataverseDeepScanConnector {
-  scan(orgUrl: string, botId: string): Promise<Record<string, unknown>>;
-}
-```
-
-**Implementation:**
-- **Only called on-demand** (not in the ingestion loop)
-- Queries Dataverse tables directly for detailed agent configuration
-- Returns untyped payload; caller maps to compliance/risky-pattern violations
-- Used to detect:
-  - Authentication mode (anonymous, generic, user)
-  - Enabled channels (Teams, portal, etc.)
-  - Connectors used (SharePoint, SQL, HTTP, etc.)
-  - Skills and plugin actions
-
-**Where used:**
-- Deep Scan button in agent detail page
-- Risky pattern detection (autonomous agents, maker credentials, HTTP actions, etc.)
-
----
-
-### 5. AppInsights Connector
-
-**Interface:**
-```ts
-interface AppInsightsConnector {
-  getHealth(): Promise<HealthMetric[]>;
-}
-```
-
-**Implementation:**
-- Queries Azure Application Insights (or legacy Analytics) for bot telemetry
-- Returns daily aggregates: `errorRate`, `avgLatencyMs`, `failedSessions`
-- No conversation content; aggregate metrics only
-
-**Where used:**
-- Health page (operational metrics dashboard)
-- Alerts (error-rate anomaly detection)
-
----
-
-### 6. KPIs Connector
-
-**Interface:**
-```ts
-interface KpisConnector {
-  getAggregates(): Promise<ConversationKpi[]>;
-}
-```
-
-**Implementation:**
-- Calls Copilot Studio native analytics aggregation API
-- Returns daily: `sessions`, `deflectionRate`, `escalationRate`
-- **Critical:** NO conversation content, no user identifiers — aggregate only
-
-**Where used:**
-- Conversation KPIs page
-- Alerts (escalation spike detection)
-
----
-
-## Engines: Business Logic
-
-### Compliance Engine
-
-**Files:** `lib/engines/compliance.ts`, API route `/api/compliance`
-
-**What it does:**
-1. Loads all `ComplianceRule`s from the config
-2. For each agent, evaluates the rule `expression` (CEL/simple DSL)
-3. Records `ComplianceViolation` if the rule fails
-4. Tracks violation lifecycle: `open` → `acknowledged` → `resolved` / `suppressed`
-
-**Rules are configurable:**
-- **Type**: `authentication`, `data_loss`, `knowledge_source`, `channel`, `connector`
-- **Severity**: `critical`, `warning`, `info`
-- **Expression**: CEL-style rules, e.g., `agent.channels.contains('Teams') && !agent.usesMFA`
-
-**Example rule:**
-```yaml
-id: auth-no-anonymous
-name: "Anonymous Authentication Blocked"
-type: authentication
-severity: critical
-enabled: true
-expression: "agent.authMode != 'anonymous'"
-```
-
----
-
-### Risky Pattern Detector
-
-**Files:** `lib/engines/risky-patterns.ts`
-
-**Patterns detected:**
-1. `autonomous` - Agent runs without user approval loops
-2. `maker_credential` - Uses maker's own credentials (not service account)
-3. `http_action` - Calls HTTP endpoints (potential data exfil)
-4. `anonymous_auth` - No authentication enforced
-5. `computer_use` - Uses Copilot Studio computer-use actions
-6. `shared_entire_tenant` - Available to all users (no scoping)
-7. `risky_connector` - Uses high-risk connectors (SQL, HTTP, custom flows)
-
-Each pattern maps to a data-collection step (ARG property, Dataverse deep scan, config check).
-
----
-
-### Maturity Assessment Engine
-
-**Files:** `lib/engines/maturity.ts`
-
-**3 pillars:**
-- **Security**: Authentication, encryption, DLP, least-privilege
-- **Management**: Versioning, documentation, ownership, governance
-- **Reporting**: Telemetry, audit, KPIs, alerting
-
-**18 controls:**
-Each control is scored 0-4:
-- **0**: Not implemented
-- **1**: Documented / planned
-- **2**: Partially implemented
-- **3**: Fully implemented
-- **4**: Automated + audited
-
-**Auto-evaluable vs. manual:**
-- **Auto-evaluable** (8): Can be inferred from ARG + Dataverse + telemetry
-  - E.g., "Agent has Conversation KPIs enabled" (telemetry check)
-  - E.g., "Agent has DLP rule" (Dataverse check)
-- **Manual** (10): Require human judgment or external data
-  - E.g., "Agent documentation is current"
-  - E.g., "Owner completed security training"
-
-**Capped scoring:** Auto scores are marked `capped: true` with `residualBurden` explaining what remains manual (e.g., "Requires stakeholder sign-off on security controls").
-
----
-
-### Release Gates Engine
-
-**Files:** `lib/engines/gates.ts`
-
-**What it does:**
-1. Load `GatePolicy` (YAML-encoded, OPA/Rego-compatible)
-2. Evaluate policy against agent + target lifecycle stage
-3. Record `GateDecision` (pass/block + reasons)
-4. Sign decision with HMAC-SHA256 (tamper detection)
-
-**Example policy:**
-```yaml
-name: "Production Gate"
-rules:
-  - agent.lifecycle == 'pilot' && !violations.critical
-  - agent.lastActivity > 30d_ago
-  - maturityScore >= 2.5
-```
-
-**Decisions:**
-- **Pass**: Agent allowed to promote; reasons list mandatory checks
-- **Block**: Agent promotion rejected; reasons explain why
-
-**Audit trail:** Every decision is signed and immutable.
-
----
-
-## Data Flow: From ARG to Dashboard
-
-### 1. Inventory Ingestion (Real-time)
-
-User loads the dashboard or clicks "Refresh":
-
-```
-Client → GET /api/agents
-  ↓
-API Route aggregates:
-  a. ARG query (ArgInventoryConnector.listAgents)
-  b. Graph resolve owners (GraphConnector.resolveOwners)
-  c. Cost metrics (CostConnector.getDailyMetrics) - optional, cached
-  ↓
-Response: Agent[] with owner names, last activity, metrics
-  ↓
-Client: Render inventory table + agent detail cards
-```
-
-### 2. Governance Evaluation (Scheduled or On-Demand)
-
-Background job or manual trigger:
-
-```
-Scheduler (hourly) or User clicks "Evaluate Compliance"
-  ↓
-Compliance engine loads all rules + agents
-  ↓
-For each agent:
-  a. ARG props + recent deep-scan result → agent state
-  b. Evaluate each ComplianceRule.expression
-  c. Record ComplianceViolation if fails
-  ↓
-Write violations to Supabase (timestamped audit log)
-  ↓
-If any violations: trigger alert (Teams/email)
-```
-
-### 3. Maturity Assessment (On-Demand or Periodic)
-
-User clicks "Run Assessment":
-
-```
-User → POST /api/maturity/assess
-  ↓
-Maturity engine:
-  a. Load all MaturityControls (3 pillars × 18 controls)
-  b. For each control:
-     - If autoEvaluable: query data sources (ARG, telemetry, Dataverse)
-     - If manual: skip (or prompt user via questionnaire)
-  c. Score 0-4 and mark capped if inferred
-  ↓
-Write MaturityResult[] to Supabase
-  ↓
-Client: Render score breakdown + residual burden list
-```
-
-### 4. Alert Lifecycle
-
-```
-Alert trigger (budget breach, compliance violation, etc.)
-  ↓
-Create Alert record (status: open)
-  ↓
-Send Teams/email notification (if configured)
-  ↓
-User acknowledges: Alert status → ack
-  ↓
-User resolves: Alert status → resolved
-  ↓
-Historical alerts stay in Supabase for reporting
-```
-
----
-
-## Storage & State
-
-### Transient (In-Memory, <5min)
-
-- ARG query results (cached at connector)
-- Graph resolutions (batched, cached)
-
-### Persistent (Supabase)
-
-- Daily metrics (time-series)
-- Compliance violations (audit log)
-- Maturity results (assessment snapshots)
-- Gate decisions (signed, immutable)
-- Alert history (lifecycle tracking)
-- Settings (tenant-specific config)
-
-### Never Stored
-
-- Conversation content
-- User identifiers
-- Secrets (client secret, keys)
-
----
-
-## Security Model
-
-### Authentication
-
-- Users authenticate via **Entra ID** (SSO, MSAL.js)
-- Service principal authenticates via **client secret** (server-side only)
-- Client secret is NEVER exposed to the browser
-
-### Authorization
-
-- Service principal needs:
-  - `Azure Resource Graph: ResourceGraph.Read.All` (app permission)
-  - `Microsoft Graph: User.Read` (delegated — for owner resolution)
-  - Power Platform Admin role (to list environments)
-- Users authenticate as themselves but see tenant-wide data (single-tenant assumption)
-
-### Data Access
-
-- **Client browser:** Sees agents, metrics, alerts (no secrets)
-- **API server:** Can access Azure Resource Graph, PPAC, Dataverse (uses client secret)
-- **Database (Supabase):** RLS (Row Level Security) policies restrict read/write by tenant
-- **Alerts:** Sent to Teams/email webhooks (no PII embedded)
-
----
-
-## Deployment Patterns
-
-### Standalone (Single Organization)
-
-```
-agentlens.contoso.com
-  ↓
-Entra tenant: contoso.onmicrosoft.com
-  ↓
-Service principal: AgentLens app registration
-  ↓
-Reads agents from: ARG in contoso.onmicrosoft.com
-```
-
-### Managed Service (Multi-Tenant, Future)
-
-Each tenant gets its own instance or isolated workspace.
-
----
-
-## Performance Targets
-
-| Operation | Latency | Cache |
-|-----------|---------|-------|
-| Load agent inventory | <1s | 5 min (ARG) |
-| Resolve owners | <2s | 1 hour (Graph batch) |
-| Fetch daily metrics | <3s | 1 hour (PPAC) |
-| Evaluate compliance | <10s | 30 min (rule eval) |
-| Assess maturity | <15s | N/A (always fresh) |
-
----
-
-## Future Extensibility
-
-### Adding a New Connector
-
-1. Define interface in `lib/connectors/interfaces.ts`
-2. Implement concrete class (e.g., `MyDataConnector`)
-3. Register in `ConnectorRegistry`
-4. Use in API routes
-
-### Adding a New Engine
-
-1. Create `lib/engines/my-engine.ts`
-2. Implement core logic + scoring
-3. Create API route `/api/my-engine`
-4. Add to dashboard page
-
-### Adding a New Data Source
-
-1. Query in the appropriate connector (or create a new one)
-2. Map results to existing types (or extend types in `lib/types/index.ts`)
-3. Use in engine or API route
-
----
-
-## References
-
-- See [docs/PLAN.md](PLAN.md) for the full v2 roadmap
-- See [docs/INSTALL.md](INSTALL.md) for deployment steps
-- See `lib/types/index.ts` for all data contracts
-- See `lib/connectors/interfaces.ts` for connector signatures
-- See `lib/mock/seed.ts` for example data
-
----
-
-**Version:** v2.0.0-beta  
-**Last Updated:** 2026-06-12
+`sources[]` is what makes the agent's answer defensible: it can always name what
+it read and what it could not. The agent's instructions require it to relay a
+`remediation` verbatim rather than paraphrase it into a generic suggestion.
+
+## Data flow, one question end to end
+
+*"Which agents actually deliver value, and what do they cost?"* →
+`value_and_cost`:
+
+1. **Sweep** the estate (`buildEstate`) — four stores, environment list, owner
+   resolution.
+2. **Read usage** from Dataverse `msdyn_conversationkpis`, per configured
+   environment, aggregated by agent and day. Per-environment failures are
+   collected, not swallowed.
+3. **Read spend** from Azure Cost Management for the scope: month-to-date actual,
+   plus Microsoft's own forecast when the forecast API answers.
+4. **Cluster** duplicates by normalised name stem.
+5. **Classify** each agent — promote / improve / consolidate / retire — from
+   sessions, escalation rate and duplicate status. An agent with no readable
+   usage gets `null` and a rationale saying so.
+6. **Report**: `ok` if both sides were read, `partial` if one was, never a blend.
+
+Cost is reported at the scope level only. Azure does not attribute spend to an
+individual agent, so there is no per-agent figure to report — the tool says this
+explicitly in `costAttributionNote` so the model does not fill the gap itself.
+
+## State
+
+There is none. No database, no cache beyond in-process tokens (5-minute expiry
+buffer) and Key Vault secrets (10 minutes). Every question triggers fresh reads.
+
+This is a deliberate trade: a governance answer that is minutes stale is a
+governance answer that is wrong, and a tool asked a handful of questions a week
+does not need a warm cache. It also means the container can scale to zero and
+restart with nothing to rehydrate.
+
+Nothing is ever persisted about a conversation: no transcript content, no end
+user identity, no message counts per person. The usage path reads a
+pre-aggregated KPI table precisely so raw transcripts are never in scope.
