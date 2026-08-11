@@ -4,8 +4,8 @@ This folder is the Microsoft 365 Copilot **declarative agent**: the conversation
 surface of AgentLens. It is what an administrator actually talks to.
 
 The agent holds no data access of its own. It calls the AgentLens **MCP server**,
-which authenticates as the `AgentLens-Reader` service principal and reads the five
-Microsoft APIs read-only.
+which lives at the root of this repo and authenticates as the `AgentLens-Reader`
+service principal to read the five Microsoft APIs, read-only.
 
 ```
 user -> declarative agent (this folder)
@@ -36,7 +36,7 @@ To pin a fixed tool set instead, see
 ## Prerequisites
 
 1. The MCP server is deployed and reachable over **https**.
-2. `AgentLens-Reader` exists and has admin consent - run `scripts/provision-app-registrations.ps1`.
+2. `AgentLens-Reader` exists and has admin consent - run `scripts/provision-reader-app.ps1`.
 3. `AgentLens-MCP` exists and has admin consent - run `scripts/provision-agent-mcp-app.ps1`.
 4. Your tenant allows uploading custom agents (Microsoft 365 admin center -> Integrated apps).
 
@@ -51,13 +51,13 @@ ever committed. Substitute them at package time:
 export AGENT_APP_ID="<your-stable-guid>"
 export AGENTLENS_MCP_URL="https://agentlens-mcp.<region>.azurecontainerapps.io/mcp"
 
-node scripts/package-agent.mjs
+npm run package:agent
 ```
 
 Output: `agent/build/agentlens-agent.zip`.
 
-> `archiver` is only needed for the zip step (`npm i -D archiver`). Without it the
-> script stages `agent/build/appPackage/` and you zip the folder **contents** yourself.
+> `archiver` is a dev dependency, so `npm install` covers it. Without it the script
+> stages `agent/build/appPackage/` and you zip the folder **contents** yourself.
 
 ## Sideload and test
 
@@ -140,7 +140,7 @@ Then repackage with the auth config ID:
 MCP_AUTH_REFERENCE_ID="<auth config ID>" \
 AGENT_APP_ID="<guid>" \
 AGENTLENS_MCP_URL="https://..." \
-node scripts/package-agent.mjs
+npm run package:agent
 ```
 
 The script prints which auth mode it packaged, so you cannot ship `None` by accident.

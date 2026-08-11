@@ -1,19 +1,14 @@
-# AgentLens - App Registrations & Permission Matrix
+# App registrations and permissions
 
-Two Entra app registrations are needed to run AgentLens in production.
-The provisioning script `scripts/provision-app-registrations.ps1` creates
-both and stores secrets in Azure Key Vault.  This document explains every
-permission requested, the least-privilege justification, and what a security
-reviewer will ask about.
+Two registrations, with deliberately separate jobs.
 
----
+| Registration | Job | Flow | Script |
+|---|---|---|---|
+| **AgentLens-Reader** | Reads the tenant. Holds every data permission | Client credentials | `scripts/provision-reader-app.ps1` |
+| **AgentLens-MCP** | Guards the MCP endpoint. Holds no data permission | Entra SSO, token validated by the server | `scripts/provision-agent-mcp-app.ps1` |
 
-## Overview
-
-| Registration | Purpose | Auth flow |
-|---|---|---|
-| **AgentLens-Reader** | Service principal for data reads (ARG, Graph) | Client credentials (app-only) |
-| **AgentLens-WebApp** | Entra SSO for the Next.js app (next-auth) | Authorization code + ID token |
+The split is the point: the thing that is exposed to the internet holds no
+permissions, and the thing that holds permissions is never exposed.
 
 ---
 
@@ -21,160 +16,115 @@ reviewer will ask about.
 
 ### What it does
 
-This SP runs the inbound data pipeline: it queries Azure Resource Graph for
-`PowerPlatformResources` (agent inventory, environment topology) and calls
-Microsoft Graph for user profile lookups.  It uses **client credentials**
-(no user context, no delegated permission, no interactive sign-in).
+Acquires tokens by client credentials for each audience the MCP server reads:
 
-### ARM / Power Platform access
-
-**No ARM permission is requested on this app registration.**
-
-Azure Resource Graph returns Power Platform resources because the SP holds
-the **Power Platform Administrator** Entra *directory role*, not because of
-any OAuth scope.  The directory role is assigned manually in the Entra portal
-after the script runs (see MANUAL STEPS in the script output).
-
-Security reviewer FAQ:
-- "Why not request `user_impersonation` on ARM?" - It would require a signed-in
-  user and would not work for a background service.  The directory role achieves
-  the same read without delegating a user credential.
-- "Does this SP have write access to any Power Platform environment?" - No.
-  The Power Platform Administrator role grants read via ARG.  AgentLens never
-  calls the Power Platform admin APIs to mutate environment configuration.
-
-### Microsoft Graph permissions
-
-| Scope | Type | ID | Why it is needed | Feature that dies without it | Least-privilege justification |
-|---|---|---|---|---|---|
-| `User.Read.All` | Application | `df021288-bdef-4463-88db-98f22de89214` | Resolve agent owners and makers from Entra user objects (display name, department, UPN) to populate the Inventory and Maker View pages. | Maker View shows only GUIDs; owner attribution is blank in Inventory. | Read-only on user profiles.  No permission to create, update, or delete users or groups. |
-
-**Admin consent required:** yes (application permission).  The script calls
-`az ad app permission admin-consent`.  A Global Admin must confirm the green
-tick in the Entra portal if the CLI call is made from a non-admin account.
-
-### Intentionally excluded permissions
-
-| Scope | Reason for exclusion |
+| Audience | Used for |
 |---|---|
-| `CopilotPackages.Read.All` | Agent 365 license-gated.  Not available in tenants without Agent 365.  Enable manually in the app registration once the tenant has licenses assigned. |
-| `Directory.Read.All` | Not needed.  `User.Read.All` is sufficient for owner resolution. |
-| `DeviceManagementApps.Read.All` and similar | Not related to the product's read surface. |
+| `https://management.azure.com/.default` | Azure Resource Graph, Cost Management, Power Platform governance (DLP) |
+| `https://graph.microsoft.com/.default` | Owner resolution, Agent 365 registry |
+| `https://service.powerapps.com/.default` | Environment list (BAP admin API) |
+| `{orgUrl}/.default` | Dataverse, per environment |
+| `https://analysis.windows.net/powerbi/api/.default` | Fabric data agents |
+
+### Graph permissions
+
+| Permission | Type | Consent | Why |
+|---|---|---|---|
+| `User.Read.All` | Application | Admin | Turn an agent's owner object ID into a name. Without it every agent looks like an orphan |
+| `CopilotPackages.Read.All` | Application | Admin | The M365 agent registry. **Licence gated** (Agent 365), so it is not requested by the script — add it manually once licensed |
+
+### Access that is not an API permission
+
+Three of the five sources are not granted through Entra API permissions at all,
+which is the most common reason a deployment half-works:
+
+| Access | Mechanism | Grants |
+|---|---|---|
+| Power Platform Administrator | Entra **directory role** on the SP | Copilot Studio agents via ARG, environment list |
+| Reader / Cost Management Reader | **Azure RBAC** on the subscription | ARG queries, real spend |
+| Admin management application | `New-PowerAppManagementApp`, run by an **administrator in a user context** | DLP policy read |
+| Application User | Per Dataverse **environment**, with a security role | Aggregate usage KPIs |
+
+A service principal cannot register itself as a management app, and a
+tenant-level grant does nothing for Dataverse — access is per environment.
+
+### Deliberately not requested
+
+| Permission | Why not |
+|---|---|
+| Any `.ReadWrite.` scope | The product's core claim is read-only. Nothing writes to the tenant |
+| `Chat.Read.All`, `ChannelMessage.Read.All` | Conversation content is never read. Usage comes from a pre-aggregated KPI table |
+| `Directory.Read.All` | `User.Read.All` is narrower and sufficient for owner names |
+| `Sites.Read.All`, `Files.Read.All` | AgentLens governs agents, not content |
+
+If a feature seems to need a broader grant, raise it rather than granting it.
 
 ### Client secret
 
-The script creates a 2-year client secret and stores it in Azure Key Vault
-as `AZURE-CLIENT-SECRET`.  The app reads it at runtime via
-`lib/config/secrets.ts` (`getSecret("AZURE-CLIENT-SECRET")`), which uses
-`DefaultAzureCredential` (managed identity in production, `az login` locally).
+Two-year expiry, created with `--append` so re-running the script never
+invalidates a secret a live deployment is using. Store it in Key Vault
+(`AZURE-CLIENT-SECRET`) and set `KEY_VAULT_URI`, or inject it as a Container App
+secret reference. It is never committed and never logged.
+
+Rotation: re-run the script, update the secret in Key Vault or the Container App,
+restart the revision, then delete the old credential in Entra.
 
 ---
 
-## AgentLens-WebApp
+## AgentLens-MCP
 
 ### What it does
 
-This app registration handles **user sign-in** via Microsoft Entra (OpenID
-Connect / OAuth2 authorization code flow).  It does not call any backend API
-directly; it issues ID tokens so the Next.js app can identify who is signed in
-and what role they hold.
+Nothing, in data terms. It exists so the MCP server can prove that an inbound
+call came from Microsoft 365 Copilot acting for a signed-in user in your tenant.
 
-### No API permissions
+The server validates, on every request:
 
-AgentLens-WebApp requests **no API permissions**.  User sign-in (OpenID
-Connect) requires only the implicit `openid`, `profile`, and `email` scopes,
-which are granted automatically and do not require admin consent.
-
-### Redirect URIs
-
-| URI | Purpose |
+| Claim | Expected |
 |---|---|
-| `https://<AppUrl>/api/auth/callback/azure-ad` | Production next-auth callback |
-| `http://localhost:3000/api/auth/callback/azure-ad` | Local development callback |
+| `aud` | The Entra SSO auth config's Application ID URI, or `api://<mcp-app-id>`. Both v1.0 and v2.0 forms are accepted |
+| `iss` | `login.microsoftonline.com/<tenant>/v2.0` or `sts.windows.net/<tenant>/` |
+| `azp` / `appid` | `ab3be6b7-f5df-413d-ac2d-abf1e3fd9c0b`, the Microsoft Enterprise token store |
 
-Both are registered by the provisioning script.
+That last GUID is the **only** client that needs pre-authorization. Copilot
+acquires the token through the Enterprise token store; this is not the Teams
+tab-SSO client-ID list, and that pattern does not apply here.
 
-### ID tokens
+### Required configuration
 
-ID tokens are enabled (`enableIdTokenIssuance: true`).  next-auth uses them
-in the hybrid flow to avoid an extra `/userinfo` round-trip.
-
-### appRoles
-
-Two roles are embedded in the app manifest.  Users must be assigned a role
-in the Entra Enterprise Application blade before they can sign in.
-
-| Role value | Display name | Who it is for | Capabilities |
-|---|---|---|---|
-| `admin` | Admin | IT admins, Witivio delivery team | Full access: settings, release gates, all environments, alert configuration |
-| `maker` | Maker | Power Platform makers and developers | Read-only access scoped to their own environments |
-
-Role assignment is a **manual step** (cannot be scripted without a signed-in
-admin session).  See the MANUAL STEPS section of the provisioning script output.
-
-### Secrets
-
-| Key Vault secret name | Env var equivalent | Purpose |
-|---|---|---|
-| `WEBAPP-CLIENT-SECRET` | `AZURE_AD_CLIENT_SECRET` | next-auth OAuth client secret |
-| `AUTH-SECRET` | `AUTH_SECRET` | next-auth JWT signing key (32 random bytes, base64) |
-
----
-
-## Security model summary
-
-| Property | Value |
+| Requirement | Value |
 |---|---|
-| **Data egress** | None beyond the app's own Supabase DB and the configured Teams webhook URL.  No customer message content is read or stored. |
-| **Write access to client tenant** | None.  AgentLens is read-only toward Power Platform and Graph. |
-| **Secret storage** | Azure Key Vault (production).  Managed identity; no credential in code or app settings.  `.env.local` for local dev only (gitignored). |
-| **Token handling** | Client credentials tokens are acquired at runtime, cached in memory with TTL, never written to disk or logs. |
-| **Least-privilege** | Two scopes total (`User.Read.All` + the PP-Admin directory role).  No write scope, no directory-write, no mail/calendar/chat access. |
-| **Auth model** | Entra SSO (OIDC).  Users must be explicitly role-assigned before they can sign in.  Auth can be disabled for demo mode. |
-| **Honesty** | Pages that require live credentials show a "not connected" state rather than fabricating data. |
+| `identifierUris` | Must include the auth config's Application ID URI |
+| Web redirect URI | `https://teams.microsoft.com/api/platform/v1.0/oAuthConsentRedirect` |
+| Expose an API → client application | `ab3be6b7-f5df-413d-ac2d-abf1e3fd9c0b` |
+
+`az ad app update` cannot set the nested `api{}` object; the script PATCHes
+Microsoft Graph directly instead.
+
+Full four-step walkthrough: [agent/README.md](../agent/README.md#authentication).
 
 ---
 
-## Common security reviewer questions
+## Security reviewer questions
 
-**Q: Does the app read message content (Teams chats, emails)?**
-A: No.  The only Graph permission is `User.Read.All` (user profiles, read-only).
-No mail, calendar, Teams, or SharePoint permission is requested.
+**Can it change anything in our tenant?** No. Every permission is a read
+permission, and no tool issues a POST, PATCH or DELETE against a tenant API. The
+only writes anywhere are to the container's stdout.
 
-**Q: Can this SP modify our Power Platform environments?**
-A: No.  The Power Platform Administrator directory role grants read access via
-Azure Resource Graph.  No write-capable Power Platform API call is made.
+**Can it read our employees' conversations with agents?** No. Usage comes from
+`msdyn_conversationkpis`, a pre-aggregated table of counts and rates. The
+`conversationtranscript` table is never queried. No end user is identified
+anywhere in the output.
 
-**Q: Why does the WebApp registration have no API permissions?**
-A: User sign-in via OIDC needs only the implicit scopes (`openid`, `profile`,
-`email`), which do not require admin consent.  All data reads are done by the
-Reader SP in a separate, server-side process.
+**What personal data does it emit?** One field: an agent *owner's* display name,
+because ownership is the accountability signal for an agent. No end users.
 
-**Q: What happens if the client secret is compromised?**
-A: Rotate it via `az ad app credential reset` (or the portal) and update the
-Key Vault secret.  The 10-minute in-memory cache in `lib/config/secrets.ts`
-will expire within 10 minutes and the new value will be picked up automatically.
+**What happens if the server is compromised?** The attacker gains whatever
+AgentLens-Reader can read — read-only, in one tenant, with every call logged by
+Entra. The server holds no permissions of its own, and rotating one client secret
+revokes the access.
 
-**Q: Does the managed identity have any permissions beyond Key Vault reads?**
-A: No.  The App Service managed identity is assigned `Key Vault Secrets User`
-on the Key Vault only.  It has no Entra directory role and no subscription role.
-
----
-
-## Provisioning script quick reference
-
-```powershell
-# First run (no Key Vault yet - prints secrets to console)
-.\scripts\provision-app-registrations.ps1 `
-    -TenantId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
-    -AppUrl   "https://agentlens.azurewebsites.net"
-
-# Production run (stores secrets in Key Vault)
-.\scripts\provision-app-registrations.ps1 `
-    -TenantId    "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
-    -AppUrl      "https://agentlens.azurewebsites.net" `
-    -KeyVaultName "agentlens-kv"
-```
-
-The script is idempotent: run it again after an environment reset or to
-rotate secrets without creating duplicate app registrations.
+**Why is the endpoint public?** Copilot requires a publicly reachable https
+endpoint. It is protected by Entra SSO token validation, not by network position.
+Until `MCP_AUDIENCE` is set, that validation is off — check `/health` reports
+`authEnabled: true` before treating the deployment as production.
