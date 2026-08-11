@@ -42,6 +42,18 @@ param azureSubscriptionId string = subscription().subscriptionId
 @description('Comma-separated Dataverse org URLs to read aggregate usage from.')
 param dataverseOrgUrls string = ''
 
+@description('Pay-as-you-go billing policy ID. Unlocks per-agent message consumption and per-agent cost.')
+param ppacBillingPolicyId string = ''
+
+@description('Your rate per standard message. Leave empty to use the published list price, labelled as such.')
+param copilotRateStandard string = ''
+
+@description('Your rate per premium message. Leave empty to use the published list price, labelled as such.')
+param copilotRatePremium string = ''
+
+@description('Currency for the rates above, e.g. USD or CHF.')
+param copilotRateCurrency string = ''
+
 @description('Tenant ID used to validate INBOUND Copilot tokens. Leave empty to run unauthenticated (local/dev only).')
 param mcpTenantId string = ''
 
@@ -69,6 +81,10 @@ module resources 'resources.bicep' = {
     azureClientSecret: azureClientSecret
     azureSubscriptionId: azureSubscriptionId
     dataverseOrgUrls: dataverseOrgUrls
+    ppacBillingPolicyId: ppacBillingPolicyId
+    copilotRateStandard: copilotRateStandard
+    copilotRatePremium: copilotRatePremium
+    copilotRateCurrency: copilotRateCurrency
     mcpTenantId: mcpTenantId
     mcpAudience: mcpAudience
   }

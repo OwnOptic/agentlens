@@ -51,7 +51,9 @@ function logStartupPosture(): void {
   console.log(`  inbound auth     : ${authEnabled() ? `Entra SSO (audience ${config.auth.audience})` : 'DISABLED - development only, do not expose publicly'}`);
   console.log(`  reader SP        : ${readerConfigured() ? 'configured' : 'NOT configured - every tool will report not_connected'}`);
   console.log(`  dataverse envs   : ${config.dataverseOrgUrls.length || 'none'}`);
-  console.log(`  subscription     : ${config.reader.subscriptionId ?? 'not set - cost unavailable'}`);
+  console.log(`  subscription     : ${config.reader.subscriptionId ?? 'not set - billed spend unavailable'}`);
+  console.log(`  billing policy   : ${config.ppacBillingPolicyId ?? 'not set - no per-agent consumption'}`);
+  console.log(`  message rates    : ${config.ratesConfigured ? 'configured on this deployment' : 'published list price (override with COPILOT_RATE_*)'}`);
   if (!readerConfigured()) {
     console.log('');
     console.log('  Tools will return status "not_connected" with remediation text.');

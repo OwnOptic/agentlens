@@ -51,6 +51,16 @@ export const config = {
   /** Dataverse org URLs for aggregate usage. Comma separated. */
   dataverseOrgUrls: list('DATAVERSE_ORG_URLS'),
 
+  /**
+   * Pay-as-you-go billing policy, for per-agent message consumption.
+   * Without it there is no per-agent cost - the endpoint is addressed by
+   * billing policy, and prepaid capacity tenants have none.
+   */
+  ppacBillingPolicyId: optional('PPAC_BILLING_POLICY_ID'),
+
+  /** True when message rates were supplied rather than defaulted to list price. */
+  ratesConfigured: Boolean(optional('COPILOT_RATE_STANDARD') || optional('COPILOT_RATE_PREMIUM')),
+
   /** Optional Azure AI Foundry project, for the Foundry store in the sweep. */
   foundryProjectEndpoint: optional('FOUNDRY_PROJECT_ENDPOINT'),
 } as const;

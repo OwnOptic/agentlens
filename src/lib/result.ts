@@ -20,6 +20,7 @@ export type DataSource =
   | 'Microsoft Graph'
   | 'Power Platform Admin API'
   | 'Power Platform Governance API'
+  | 'Power Platform Licensing API'
   | 'Dataverse'
   | 'Azure Cost Management'
   | 'Azure AI Foundry'

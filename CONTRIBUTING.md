@@ -11,7 +11,11 @@ trusted again.
 
 Concretely, in any code you add:
 
-- Every figure returned must come from an API response in the same call.
+- Every figure returned must come from an API response in the same call, or be
+  derived from one by arithmetic whose inputs and method ship in the same
+  payload. Per-agent cost is metered messages x a stated rate, and the rate and
+  its source travel with the number. A derived figure with an invisible constant
+  behind it is a fabricated figure.
 - If a source cannot be read, return `not_connected` or `partial` and say which
   source and why. Never substitute an estimate, an average, a sample or a
   placeholder.
@@ -56,8 +60,16 @@ Every tool must:
   text, redesign the feature.
 - **A fallback that returns sample data when a source fails.** The previous
   version of this codebase had one. It is why `not_connected` exists.
-- **A per-agent cost figure derived from the tenant total.** Azure does not
-  attribute spend per agent. Dividing is inventing.
+- **A per-agent cost derived from the tenant total.** Azure does not attribute
+  spend per agent, so dividing the invoice by the agent count is inventing.
+  Per-agent cost comes from per-agent metered consumption priced at a stated
+  rate - a different thing, and the only sanctioned way to produce one.
+- **A second hardcoded price anywhere.** `src/domain/rates.ts` is the only place
+  a rate may live, and it exists to make the rate visible. If you find yourself
+  writing `* 0.01` in a connector or a tool, that is the bug this file is about.
+- **Adding metered consumption to billed spend.** They measure different things.
+  Prepaid capacity absorbs consumption that never reaches an invoice, so summing
+  them double-counts and the total means nothing.
 - **A hardcoded tenant ID, subscription ID, client ID, secret or URL.**
   Environment only.
 - **A wider permission to make a feature easier.** If a feature needs write
@@ -76,6 +88,11 @@ curl http://localhost:3000/health
 **Always test the unhappy path.** Unset `AZURE_CLIENT_SECRET` and confirm every
 tool reports the source as not connected rather than producing numbers. That
 failure mode is the product's core promise, so it is the one that has to work.
+
+Then unset `PPAC_BILLING_POLICY_ID` specifically: `value_and_cost` must still
+return adoption and billed spend with per-agent cost absent, and
+`consolidation_plan` must drop its savings line from the brief entirely rather
+than printing a hedged or zero one.
 
 Then test the second unhappy path, which is subtler: set *bogus* credentials.
 Tokens fail to acquire, and the tools must still refuse to report "0 agents".

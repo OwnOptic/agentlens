@@ -9,6 +9,10 @@
     "azureClientSecret": { "value": "${AZURE_CLIENT_SECRET}" },
     "azureSubscriptionId": { "value": "${AZURE_SUBSCRIPTION_ID}" },
     "dataverseOrgUrls": { "value": "${DATAVERSE_ORG_URLS}" },
+    "ppacBillingPolicyId": { "value": "${PPAC_BILLING_POLICY_ID}" },
+    "copilotRateStandard": { "value": "${COPILOT_RATE_STANDARD}" },
+    "copilotRatePremium": { "value": "${COPILOT_RATE_PREMIUM}" },
+    "copilotRateCurrency": { "value": "${COPILOT_RATE_CURRENCY}" },
     "mcpTenantId": { "value": "${MCP_TENANT_ID}" },
     "mcpAudience": { "value": "${MCP_AUDIENCE}" }
   }
