@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "${AZURE_ENV_NAME}" },
+    "location": { "value": "${AZURE_LOCATION}" },
+    "azureTenantId": { "value": "${AZURE_TENANT_ID}" },
+    "azureClientId": { "value": "${AZURE_CLIENT_ID}" },
+    "azureClientSecret": { "value": "${AZURE_CLIENT_SECRET}" },
+    "azureSubscriptionId": { "value": "${AZURE_SUBSCRIPTION_ID}" },
+    "dataverseOrgUrls": { "value": "${DATAVERSE_ORG_URLS}" },
+    "mcpTenantId": { "value": "${MCP_TENANT_ID}" },
+    "mcpAudience": { "value": "${MCP_AUDIENCE}" }
+  }
+}

@@ -1,50 +1,25 @@
 # dependencies
 /node_modules
-/.pnp
-.pnp.js
 
-# next.js
-/.next/
-/out/
-/build
-next-env.d.ts
-
-# production
+# build output
 /dist
-
-# misc
-.DS_Store
-*.pem
 *.tsbuildinfo
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # local env files (keep .env.example)
 .env
-.env*.local
-.env.development
-.env.production
+.env.*.local
 
-# editor
+# azd
+.azure/
+
+# editors
 .vscode/
 .idea/
+.DS_Store
 
-# supabase local
-/supabase/.branches
-/supabase/.temp
-
-# coverage
-/coverage
-
-# agent + build artifacts
-.claude/
-BUILD_SUMMARY.txt
-
-# Local deploy artifact
-deploy.zip
+# logs
+npm-debug.log*
+*.log
 
 # packaged declarative agent (built by scripts/package-agent.mjs)
 /agent/build
