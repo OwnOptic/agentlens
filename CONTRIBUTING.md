@@ -81,9 +81,24 @@ Fast loop, no Copilot needed:
 
 ```bash
 npm run type-check
+npm test                        # unit tests - the honesty rules, in code
+npm run validate:agent          # the agent package against Microsoft's schemas
 npm run inspect                 # build + MCP Inspector, call each tool directly
 curl http://localhost:3000/health
 ```
+
+CI runs the first three on every push and PR. Nothing here needs tenant
+credentials or a live network beyond fetching the published schemas, so it runs
+the same in CI as it does for you.
+
+The unit tests in `src/**/*.test.ts` sit next to what they test and cover the
+`src/domain/` and `src/lib/result.ts` layer: rate resolution and provenance,
+per-row pricing on mixed meters, verdict classification (especially that
+unreadable usage never becomes a zero verdict), duplicate clustering, and the
+`ToolResult` contract itself. They do not call a live Microsoft API - that is
+what `verify:consumption` is for, below. When you add a domain function or
+change one, add or update its test in the same PR; a behaviour change with no
+test change is the thing review should catch.
 
 **Always test the unhappy path.** Unset `AZURE_CLIENT_SECRET` and confirm every
 tool reports the source as not connected rather than producing numbers. That
