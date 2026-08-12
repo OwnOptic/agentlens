@@ -1,5 +1,7 @@
 # AgentLens
 
+[![CI](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml/badge.svg)](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml)
+
 A Microsoft 365 Copilot agent that audits the AI agents in your tenant.
 
 You ask it a question in Copilot chat. It reads your tenant read-only and answers
@@ -16,7 +18,8 @@ you  ->  AgentLens declarative agent   (agent/)     what you talk to in Copilot
 ```
 
 Two pieces, one repo. The agent package is the conversational surface; the MCP
-server is everything behind it.
+server is everything behind it. Full diagram, with the read-only and
+unreadable-≠-zero guarantees called out: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#the-shape-of-it).
 
 ---
 
@@ -84,6 +87,8 @@ Two consequences you might otherwise read as missing features:
   and the method travel with it in the same payload. See below.
 
 ### Two kinds of cost, kept apart
+
+![Two cost figures in value_and_cost, never summed: metered messages priced by src/domain/rates.ts produce a derived per-agent cost, and Azure Cost Management produces the real invoiced total at scope level.](docs/diagrams/cost-model.svg)
 
 `value_and_cost` reports both, and never adds them together:
 

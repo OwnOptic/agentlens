@@ -1,0 +1,74 @@
+name: CI
+
+# Runs on every push and PR against main. There is no deploy step here on
+# purpose - deployment is `azd up`, run by whoever holds the tenant
+# credentials, never by a workflow that would need them as repo secrets.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Type-check, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Docker image builds
+        run: docker build -t agentlens:ci .
+
+  validate-agent-package:
+    name: Validate the declarative agent package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate against Microsoft's published schemas
+        run: |
+          set +e
+          npm run validate:agent
+          code=$?
+          set -e
+
+          # Exit 0: valid.
+          # Exit 1: a real validation failure - the package would likely be
+          #         rejected on sideload. Fail the job.
+          # Exit 2: the schema fetch itself failed (e.g. a transient outage at
+          #         learn.microsoft.com) - only the offline structural checks
+          #         ran. That is a flaky-network signal, not a broken PR, so it
+          #         warns instead of blocking.
+          if [ "$code" -eq 1 ]; then
+            echo "::error::Agent package failed validation - see the FAIL lines above."
+            exit 1
+          elif [ "$code" -eq 2 ]; then
+            echo "::warning::Could not fetch Microsoft's schemas, so only offline checks ran. Re-run if this persists."
+          fi

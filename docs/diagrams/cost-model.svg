@@ -1,0 +1,80 @@
+<svg viewBox="0 0 920 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Two kinds of cost, kept apart</title>
+  <desc id="desc">
+    value_and_cost produces two separate cost figures and never sums them. The consumption path
+    reads per-agent messages from the Power Platform licensing API and prices them using the rate
+    in src/domain/rates.ts, which is either an operator-configured rate or Microsoft's published
+    list price - either way the rate and its source travel with the figure. This produces a
+    derived, per-agent cost. The billed path reads Azure Cost Management directly and reports the
+    real invoiced total at the subscription or billing scope, with no per-agent breakdown, because
+    Azure does not attribute spend to an individual agent. A gap between the two figures usually
+    means prepaid capacity is absorbing consumption that never reaches an invoice.
+  </desc>
+
+  <defs>
+    <marker id="cmArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2A3B4E"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="920" height="400" fill="#FFFFFF"/>
+
+  <text x="460" y="30" text-anchor="middle" fill="#2A3B4E" font-weight="700" font-size="16">value_and_cost: two figures, never added together</text>
+
+  <!-- Left column: CONSUMPTION, a derived figure -->
+  <g>
+    <rect x="30" y="56" width="380" height="26" rx="6" fill="#F26F21" fill-opacity="0.14"/>
+    <text x="220" y="74" text-anchor="middle" fill="#B5540E" font-weight="700" font-size="13">CONSUMPTION — derived</text>
+
+    <rect x="30" y="98" width="380" height="52" rx="9" fill="#FFFFFF" stroke="#2A3B4E" stroke-width="1.25"/>
+    <text x="220" y="119" text-anchor="middle" fill="#2A3B4E" font-weight="600" font-size="13">Power Platform licensing API</text>
+    <text x="220" y="136" text-anchor="middle" fill="#6B7A8F" font-size="11.5">messages per agent per day</text>
+
+    <line x1="220" y1="150" x2="220" y2="176" stroke="#2A3B4E" stroke-width="1.5" marker-end="url(#cmArrow)"/>
+
+    <rect x="30" y="178" width="380" height="58" rx="9" fill="#FFFFFF" stroke="#F26F21" stroke-width="1.5"/>
+    <text x="220" y="199" text-anchor="middle" fill="#B5540E" font-weight="600" font-size="13">priced by src/domain/rates.ts</text>
+    <text x="220" y="216" text-anchor="middle" fill="#6B7A8F" font-size="11">your COPILOT_RATE_* or Microsoft's</text>
+    <text x="220" y="230" text-anchor="middle" fill="#6B7A8F" font-size="11">list price — the rate ships with the figure</text>
+
+    <line x1="220" y1="236" x2="220" y2="262" stroke="#2A3B4E" stroke-width="1.5" marker-end="url(#cmArrow)"/>
+
+    <rect x="30" y="264" width="380" height="60" rx="9" fill="#2A3B4E"/>
+    <text x="220" y="288" text-anchor="middle" fill="#FFFFFF" font-weight="700" font-size="14">per-agent cost</text>
+    <text x="220" y="308" text-anchor="middle" fill="#C9D2DD" font-size="11.5">costOnZeroUsageAgents finds the waste</text>
+
+    <text x="220" y="345" text-anchor="middle" fill="#4A5568" font-size="11.5">Covers pay-as-you-go agents only.</text>
+    <text x="220" y="361" text-anchor="middle" fill="#4A5568" font-size="11.5">Prepaid-capacity agents: unmeasured, not free.</text>
+  </g>
+
+  <!-- Right column: BILLED, an invoiced figure -->
+  <g>
+    <rect x="510" y="56" width="380" height="26" rx="6" fill="#2A3B4E" fill-opacity="0.12"/>
+    <text x="700" y="74" text-anchor="middle" fill="#2A3B4E" font-weight="700" font-size="13">BILLED — invoiced</text>
+
+    <rect x="510" y="98" width="380" height="52" rx="9" fill="#FFFFFF" stroke="#2A3B4E" stroke-width="1.25"/>
+    <text x="700" y="119" text-anchor="middle" fill="#2A3B4E" font-weight="600" font-size="13">Azure Cost Management</text>
+    <text x="700" y="136" text-anchor="middle" fill="#6B7A8F" font-size="11.5">queried directly, at scope level</text>
+
+    <line x1="700" y1="150" x2="700" y2="262" stroke="#2A3B4E" stroke-width="1.5" stroke-dasharray="1 0" marker-end="url(#cmArrow)"/>
+    <text x="718" y="200" fill="#6B7A8F" font-size="11" font-style="italic">no pricing step —</text>
+    <text x="718" y="214" fill="#6B7A8F" font-size="11" font-style="italic">this is what Azure</text>
+    <text x="718" y="228" fill="#6B7A8F" font-size="11" font-style="italic">actually invoiced</text>
+
+    <rect x="510" y="264" width="380" height="60" rx="9" fill="#2A3B4E"/>
+    <text x="700" y="288" text-anchor="middle" fill="#FFFFFF" font-weight="700" font-size="14">month-to-date total + forecast</text>
+    <text x="700" y="308" text-anchor="middle" fill="#C9D2DD" font-size="11.5">scope-level only, no per-agent split</text>
+
+    <text x="700" y="345" text-anchor="middle" fill="#4A5568" font-size="11.5">Azure does not attribute spend to one agent —</text>
+    <text x="700" y="361" fill="#4A5568" font-size="11.5" text-anchor="middle">dividing this total would be inventing a figure.</text>
+  </g>
+
+  <!-- the "never summed" divider -->
+  <g>
+    <line x1="460" y1="90" x2="460" y2="330" stroke="#C9C2AE" stroke-width="1.5" stroke-dasharray="5 5"/>
+    <rect x="428" y="188" width="64" height="30" rx="15" fill="#FFFFFF" stroke="#C9C2AE" stroke-width="1.5"/>
+    <text x="460" y="208" text-anchor="middle" fill="#8A6F3D" font-weight="700" font-size="15">≠</text>
+  </g>
+
+  <text x="460" y="386" text-anchor="middle" fill="#6B7A8F" font-size="11.5">A gap between them is usually prepaid capacity absorbing consumption an invoice never shows.</text>
+</svg>
