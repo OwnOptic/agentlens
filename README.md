@@ -167,46 +167,33 @@ the same call returns your tenant.
 
 ## Deploy it
 
-One command. It provisions a Container App that **scales to zero**, which suits a
-governance agent — you ask it questions a few times a week, and it costs nothing
-in between.
+### What actually needs deploying, and why
 
-```bash
-azd auth login
-azd up
+The agent package is five files — two manifests, a plugin descriptor and two
+icons. **It contains no code.** Inside `ai-plugin.json`:
+
+```json
+"type": "RemoteMCPServer",
+"spec": { "url": "${{AGENTLENS_MCP_URL}}" }
 ```
 
-`azd` asks for an environment name and a region, then prints:
+Copilot calls that URL live, every time someone asks a question. The MCP server
+is where the five tools run, and the only place that can hold the reader
+credentials and call Azure Resource Graph, Graph, Dataverse and Cost Management —
+a declarative agent has instructions and actions, not code, and cannot do a
+client-credentials token flow itself.
 
-```
-AGENTLENS_MCP_URL = https://ca-agentlens-xxxx.azurecontainerapps.io/mcp
-AGENTLENS_HEALTH_URL = https://ca-agentlens-xxxx.azurecontainerapps.io/health
-```
+So there are exactly three things to stand up:
 
-Keep that first URL — it is the one value the agent package needs.
+1. **Two app registrations** — `AgentLens-Reader` (does the reading) and
+   `AgentLens-MCP` (guards the endpoint).
+2. **The MCP server**, on a public https endpoint. Below.
+3. **The zip**, sideloaded into Copilot. [Next section](#package-and-sideload-the-agent).
 
-To pass the reader credentials in at provision time, set them first:
+Without step 2 the agent installs cleanly, shows its five starters, and fails
+every question — the action points at nothing.
 
-```bash
-azd env set AZURE_TENANT_ID <tenant-guid>
-azd env set AZURE_CLIENT_ID <reader-app-id>
-azd env set AZURE_CLIENT_SECRET <reader-secret>
-azd env set AZURE_SUBSCRIPTION_ID <subscription-guid>
-azd env set DATAVERSE_ORG_URLS https://contoso.crm4.dynamics.com
-azd up
-```
-
-They can also be added later in the portal under the Container App's environment
-variables — the server reads them at call time, so a revision restart is enough.
-
-Confirm it is alive:
-
-```bash
-curl https://<your-app>.azurecontainerapps.io/health
-```
-
-<details>
-<summary>Without azd, or into an existing environment</summary>
+### One command
 
 ```bash
 az containerapp up \
@@ -215,23 +202,71 @@ az containerapp up \
   --location <region> \
   --source . \
   --target-port 3000 \
-  --ingress external \
-  --env-vars AZURE_TENANT_ID=<t> AZURE_CLIENT_ID=<c> AZURE_SUBSCRIPTION_ID=<s>
+  --ingress external
 ```
 
-Then set the secret separately so it is never in shell history or the revision
-template:
+That builds the image from this repo, creates the registry, environment and app,
+and prints the FQDN. Your MCP URL is that host with `/mcp` on the end.
+
+Then the credentials. Set the secret as a **secret**, not an env var, so it never
+lands in shell history or the revision template:
 
 ```bash
 az containerapp secret set --name agentlens-mcp --resource-group <rg> \
-  --secrets azure-client-secret=<value>
+  --secrets azure-client-secret=<reader-secret>
+
 az containerapp update --name agentlens-mcp --resource-group <rg> \
-  --set-env-vars AZURE_CLIENT_SECRET=secretref:azure-client-secret
+  --set-env-vars \
+    AZURE_TENANT_ID=<tenant-guid> \
+    AZURE_CLIENT_ID=<reader-app-id> \
+    AZURE_CLIENT_SECRET=secretref:azure-client-secret \
+    AZURE_SUBSCRIPTION_ID=<subscription-guid> \
+    DATAVERSE_ORG_URLS=https://contoso.crm4.dynamics.com \
+    PPAC_BILLING_POLICY_ID=<billing-policy-guid>
 ```
+
+Confirm it is alive:
+
+```bash
+curl https://<your-app>.azurecontainerapps.io/health
+# {"status":"ok","authEnabled":false,"readerConfigured":true,...}
+```
+
+Set `--min-replicas 0` (the default for `up`) and the app **scales to zero**,
+costing nothing between questions — which suits a governance agent asked a few
+things a week. The first call after idle pays a few seconds of cold start.
+
+<details>
+<summary>Repeatable across client tenants: <code>azd up</code></summary>
+
+If you are deploying AgentLens into several tenants and want the infrastructure
+reviewable and reproducible, `infra/` has the same thing as bicep:
+
+```bash
+azd auth login
+azd env set AZURE_TENANT_ID <tenant-guid>
+azd env set AZURE_CLIENT_ID <reader-app-id>
+azd env set AZURE_CLIENT_SECRET <reader-secret>
+azd env set AZURE_SUBSCRIPTION_ID <subscription-guid>
+azd env set DATAVERSE_ORG_URLS https://contoso.crm4.dynamics.com
+azd env set PPAC_BILLING_POLICY_ID <billing-policy-guid>
+azd up
+```
+
+It provisions a registry, Log Analytics, a Container Apps environment and the
+app with a user-assigned identity holding AcrPull, then prints:
+
+```
+AGENTLENS_MCP_URL = https://ca-agentlens-xxxx.azurecontainerapps.io/mcp
+AGENTLENS_HEALTH_URL = https://ca-agentlens-xxxx.azurecontainerapps.io/health
+```
+
+Both paths produce the same running server. Use whichever fits — the one-command
+route for a single tenant, bicep when it has to be repeatable.
+</details>
 
 Copilot requires a public **https** endpoint, so localhost works only with
 Inspector.
-</details>
 
 ---
 

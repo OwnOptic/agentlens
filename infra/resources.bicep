@@ -23,6 +23,11 @@ param mcpAudience string
 var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
 resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+  // BCP334 fires because Bicep types resourceToken as an unconstrained string
+  // and cannot prove it meets the registry's 5-character minimum.
+  // uniqueString() always returns exactly 13 alphanumeric characters, so this
+  // name is always 15 - inside the 5-50 alphanumeric-only rule for a registry.
+  #disable-next-line BCP334
   name: 'cr${resourceToken}'
   location: location
   tags: tags
