@@ -39,6 +39,24 @@ jobs:
       - name: Docker image builds
         run: docker build -t agentlens:ci .
 
+  compile-infra:
+    name: Compile the bicep templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # infra/ is the repeatable deployment path for multiple client tenants.
+      # It is optional to use - `az containerapp up --source .` does the same
+      # thing without it - but as long as it ships, it gets compiled, so a
+      # template error surfaces here rather than part-way through a provision.
+      # This checks syntax and types only; it does not validate deployment
+      # behaviour against a live subscription.
+      - name: az bicep build
+        run: |
+          az bicep install
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          echo "infra/main.bicep and its modules compile."
+
   validate-agent-package:
     name: Validate the declarative agent package
     runs-on: ubuntu-latest

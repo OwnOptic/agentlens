@@ -96,7 +96,51 @@ app user → AgentLens-Reader → assign a read role. List those org URLs in
 licensed for Agent 365. Without it the M365 registry store reports not connected
 and the rest of the sweep still returns.
 
-## Step 3 — deploy the server
+## Step 3 — deploy the MCP server
+
+The declarative agent has no code in it. This is the endpoint its action points
+at, and where all five tools run.
+
+### 3a. The one-command path
+
+```bash
+az containerapp up \
+  --name agentlens-mcp \
+  --resource-group <rg> \
+  --location <region> \
+  --source . \
+  --target-port 3000 \
+  --ingress external
+```
+
+Builds the image from the repo, creates the registry, environment and app
+implicitly, and prints the FQDN. Add `/mcp` to it for `AGENTLENS_MCP_URL`.
+
+Then the configuration, with the client secret held as a secret rather than a
+plain environment variable:
+
+```bash
+az containerapp secret set --name agentlens-mcp --resource-group <rg> \
+  --secrets azure-client-secret=<reader-secret>
+
+az containerapp update --name agentlens-mcp --resource-group <rg> \
+  --set-env-vars \
+    AZURE_TENANT_ID=<guid> \
+    AZURE_CLIENT_ID=<reader-app-id> \
+    AZURE_CLIENT_SECRET=secretref:azure-client-secret \
+    AZURE_SUBSCRIPTION_ID=<guid> \
+    DATAVERSE_ORG_URLS=https://contoso.crm4.dynamics.com \
+    PPAC_BILLING_POLICY_ID=<billing-policy-guid>
+```
+
+Optional: `COPILOT_RATE_STANDARD` and `COPILOT_RATE_PREMIUM` to price per-agent
+consumption at your own rates. Unset falls back to the published list price,
+labelled as such in every result.
+
+### 3b. The repeatable path, for multiple client tenants
+
+`infra/` is the same deployment as bicep, when you want it reviewable and
+reproducible rather than assembled by a CLI:
 
 ```bash
 azd auth login
@@ -121,6 +165,10 @@ What it provisions, all in one resource group:
 | Container Apps environment | |
 | Container App | ingress on 3000, **minReplicas 0** |
 | User-assigned identity | AcrPull on the registry, so no admin credentials |
+
+Both paths produce the same running server. CI compiles the bicep on every push,
+so a template error surfaces before you run it — but neither path has been run
+against a live subscription yet, so treat the first deployment as the real test.
 
 Scale-to-zero is the point: the app costs nothing while idle, and a governance
 agent is idle most of the time. First call after idling pays a cold start of a
