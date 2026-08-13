@@ -28,7 +28,7 @@ unreadable-≠-zero guarantees called out: [docs/ARCHITECTURE.md](docs/ARCHITECT
 - [What it answers](#what-it-answers)
 - [The one rule](#the-one-rule)
 - [Run it locally in five minutes](#run-it-locally-in-five-minutes)
-- [Deploy it](#deploy-it)
+- [Deploy it](#deploy-it) — [the whole install, in order](#the-whole-install-in-order)
 - [Package and sideload the agent](#package-and-sideload-the-agent)
 - [Access: what to grant, and what breaks without it](#access-what-to-grant-and-what-breaks-without-it)
 - [Securing the server](#securing-the-server)
@@ -192,6 +192,54 @@ So there are exactly three things to stand up:
 
 Without step 2 the agent installs cleanly, shows its five starters, and fails
 every question — the action points at nothing.
+
+### The whole install, in order
+
+Everything below is expanded in the sections that follow, and in
+[docs/DEPLOY.md](docs/DEPLOY.md). Steps marked **manual** cannot be scripted —
+Microsoft requires a signed-in human for them.
+
+```bash
+# 1. The reader app registration, and its client secret
+./scripts/provision-reader-app.ps1 -TenantId <tenant-guid>
+
+# 2. MANUAL, in the portal — each one you skip becomes a not_connected source:
+#    - Power Platform Administrator directory role  -> AgentLens-Reader
+#    - Reader + Cost Management Reader on the subscription
+#    - New-PowerAppManagementApp -ApplicationId <reader-app-id>   (user context)
+#    - Application User in each Dataverse environment
+
+# 3. Deploy the MCP server
+az containerapp up --name agentlens-mcp --resource-group <rg> \
+  --location <region> --source . --target-port 3000 --ingress external
+
+# 4. Configure it (secret as a secret, not an env var)
+az containerapp secret set --name agentlens-mcp --resource-group <rg> \
+  --secrets azure-client-secret=<reader-secret>
+az containerapp update --name agentlens-mcp --resource-group <rg> \
+  --set-env-vars AZURE_TENANT_ID=<t> AZURE_CLIENT_ID=<c> \
+    AZURE_CLIENT_SECRET=secretref:azure-client-secret \
+    AZURE_SUBSCRIPTION_ID=<s> DATAVERSE_ORG_URLS=<urls> \
+    PPAC_BILLING_POLICY_ID=<policy>
+
+# 5. Check what it can actually reach before trusting a number
+curl https://<app>.azurecontainerapps.io/health
+PPAC_BILLING_POLICY_ID=<policy> npm run verify:consumption
+
+# 6. Package the agent and sideload the zip           (upload is MANUAL)
+AGENT_APP_ID=<stable-guid> \
+AGENTLENS_MCP_URL=https://<app>.azurecontainerapps.io/mcp \
+  npm run package:agent
+
+# 7. Secure the endpoint before anyone else finds the URL
+./scripts/provision-agent-mcp-app.ps1 -TenantId <t> -McpUrl https://<app>/mcp
+#    then create the Entra SSO auth config             (MANUAL — toolkit/portal)
+#    then set MCP_TENANT_ID + MCP_AUDIENCE and repackage with
+#    MCP_AUTH_REFERENCE_ID
+```
+
+Until step 7, `/health` reports `authEnabled: false` and **anyone with the URL
+can call the server**.
 
 ### One command
 
