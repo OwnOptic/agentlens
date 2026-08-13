@@ -29,6 +29,7 @@ unreadable-≠-zero guarantees called out: [docs/ARCHITECTURE.md](docs/ARCHITECT
 - [The one rule](#the-one-rule)
 - [Run it locally in five minutes](#run-it-locally-in-five-minutes)
 - [Deploy it](#deploy-it) — [the whole install, in order](#the-whole-install-in-order)
+  · step-by-step reference: [docs/INSTALL.md](docs/INSTALL.md)
 - [Package and sideload the agent](#package-and-sideload-the-agent)
 - [Access: what to grant, and what breaks without it](#access-what-to-grant-and-what-breaks-without-it)
 - [Securing the server](#securing-the-server)
@@ -195,9 +196,28 @@ every question — the action points at nothing.
 
 ### The whole install, in order
 
-Everything below is expanded in the sections that follow, and in
-[docs/DEPLOY.md](docs/DEPLOY.md). Steps marked **manual** cannot be scripted —
-Microsoft requires a signed-in human for them.
+**Fastest path: let Claude do it.** Open this repo with Claude Code and say
+*"install AgentLens and guide me."* It follows [CLAUDE.md](CLAUDE.md), runs every
+scriptable step, stops at each gate with the exact click-path, packages the zip
+with the right endpoint baked in, and hands it to you to upload. You do six
+things; it does the rest.
+
+**Or run the installer yourself:**
+
+```powershell
+./scripts/install.ps1 -TenantId <guid> -ResourceGroup rg-agentlens -Location westeurope -DryRun
+```
+
+`-DryRun` prints every command and every gate without changing anything. Drop it
+to run for real. It is idempotent and resumable — re-run after clearing a gate
+and it picks up where it stopped.
+
+**Or by hand.** Every step is documented individually — what it does, the exact
+command, how to verify it, and what breaks without it — in
+[docs/INSTALL.md](docs/INSTALL.md). Summary:
+
+Steps marked **manual** cannot be scripted — Microsoft requires a signed-in human
+for them.
 
 ```bash
 # 1. The reader app registration, and its client secret
@@ -283,6 +303,11 @@ curl https://<your-app>.azurecontainerapps.io/health
 Set `--min-replicas 0` (the default for `up`) and the app **scales to zero**,
 costing nothing between questions — which suits a governance agent asked a few
 things a week. The first call after idle pays a few seconds of cold start.
+
+The *app* is free at idle; the deployment is not. The container registry bills a
+few dollars a month whether or not you pull from it, and Log Analytics is free
+only up to its ingestion allowance — which a quiet server stays well under. See
+[the cost note](docs/INSTALL.md#cost-honestly).
 
 <details>
 <summary>Repeatable across client tenants: <code>azd up</code></summary>

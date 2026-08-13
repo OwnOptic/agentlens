@@ -12,6 +12,10 @@
 # azd
 .azure/
 
+# scripts/install.ps1 resume state - app IDs and URLs, never secrets, but
+# tenant-specific and not something to commit
+.agentlens-install.json
+
 # editors
 .vscode/
 .idea/
