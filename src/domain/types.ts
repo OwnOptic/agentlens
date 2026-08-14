@@ -52,6 +52,13 @@ export interface Agent {
   /** The API this record was discovered through. */
   source: string;
   state?: string;
+  /** When the agent was last published. null = never published (a draft). */
+  publishedOn?: string | null;
+  /**
+   * True when the owner account exists but is DISABLED in Entra - a stronger
+   * orphan signal than a missing owner: someone left, the agent kept running.
+   */
+  ownerDisabled?: boolean;
   createdOn?: string;
   modifiedOn?: string;
   lastActivity?: string | null;

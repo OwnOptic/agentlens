@@ -124,11 +124,16 @@ conclude anything about access from a 429.
 
 ### Azure Resource Graph returns zero rows and no error
 
-The documented behaviour when the Power Platform Administrator role is missing,
-and indistinguishable from an empty tenant. (In live testing, an SP with **no**
-role got an explicit `AccessDenied`; the silent-zero case may require partial
-privileges.) Either way: trust a zero only when a sibling query on the same
-token returns rows - connectors and environments exist in every tenant.
+Microsoft's docs describe this as the behaviour when the Power Platform
+Administrator role is missing - indistinguishable from an empty tenant. **Live
+experiments could not reproduce it**: an SP with no role at all, and an SP with
+subscription Reader but no PP Administrator, both received an explicit
+`AccessDenied` from `PowerPlatformResources` while the `Resources` table
+returned rows on the same token (tested 2026-08-14, api-version 2021-03-01).
+So in current behaviour the failure is loud. The sibling-query verify stays
+anyway - it costs one query, guards against the documented behaviour returning
+in another tenant or API version, and is the only way to prove a zero is real:
+trust it only when connectors and environments return rows on the same token.
 
 ### A tool says a store is `not_connected` and names a licence
 

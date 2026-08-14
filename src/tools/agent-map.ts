@@ -297,6 +297,9 @@ export const agentMapTool = {
     description:
       'Render the agent estate as a diagram: the four stores with their counts, and the findings worth acting on such as orphaned agents and duplicate clusters. Stores that could not be read are labelled "not connected" rather than shown as zero. PRESENTATION: put the mermaid field inside a ```mermaid code fence so the chat renders it as a diagram - never redraw the map as ASCII art or plain text. Offer the svg field as a file for documents and exports. Read-only.',
     inputSchema: agentMapInput,
+    // Read-only, stated machine-readably: Cowork (and progressively Copilot)
+    // treats unannotated tools as destructive and demands confirmation.
+    annotations: { title: 'Map my agents', readOnlyHint: true, destructiveHint: false },
   },
   handler: async (args: { groupBy?: 'store' | 'environment' }) => toMcpContent(await agentMap(args)),
 };

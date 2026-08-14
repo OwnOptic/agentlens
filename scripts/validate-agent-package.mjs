@@ -24,7 +24,18 @@ import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv-draft-04';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pkgDir = path.join(root, 'agent', 'appPackage');
+
+/*
+ * Validate the BUILT package when one exists. package-agent.mjs stages the
+ * substituted files in agent/build/appPackage before zipping, and that is
+ * what actually ships - validating the templated source with stand-in values
+ * once reported "auth is None" while the artifact carried OAuthPluginVault.
+ * Fall back to the source templates (with stand-ins) when nothing was built.
+ */
+import { existsSync } from 'node:fs';
+const builtDir = path.join(root, 'agent', 'build', 'appPackage');
+const usingBuild = existsSync(path.join(builtDir, 'manifest.json'));
+const pkgDir = usingBuild ? builtDir : path.join(root, 'agent', 'appPackage');
 
 /* Stand-in values for the ${{TOKEN}} placeholders. Shape matters, not identity. */
 const PLACEHOLDERS = {
@@ -40,6 +51,7 @@ const SCHEMAS = {
 };
 
 const c = { reset: '\x1b[0m', red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m', cyan: '\x1b[36m', dim: '\x1b[2m' };
+console.log(usingBuild ? '  validating the BUILT package (agent/build/appPackage)' : '  validating SOURCE templates with stand-in values - run package:agent for the real artifact');
 const problems = [];
 const notes = [];
 const ok = (m) => console.log(`${c.green}  PASS${c.reset}  ${m}`);

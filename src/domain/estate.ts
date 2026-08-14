@@ -25,6 +25,12 @@ export interface Estate {
   ownersResolvable: boolean;
   /** Agents with no resolvable owner - the orphan finding. */
   orphans: Agent[];
+  /**
+   * Agents whose owner EXISTS but whose account is disabled in Entra - a
+   * stronger orphan signal than a missing owner: the person left and the
+   * agent kept running under their name.
+   */
+  disabledOwners: Agent[];
 }
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,14 +59,21 @@ export async function buildEstate(opts?: { environmentId?: string }): Promise<Es
   const owners = await resolveOwners(ownerIds);
   const ownersResolvable = ownerIds.length === 0 || owners.size > 0;
 
-  agents = agents.map((agent) => ({
-    ...agent,
-    owner: agent.owner && GUID.test(agent.owner) ? (owners.get(agent.owner)?.name ?? null) : agent.owner,
-    location:
-      agent.location && environmentNames.has(agent.location)
-        ? environmentNames.get(agent.location)!
-        : agent.location,
-  }));
+  agents = agents.map((agent) => {
+    const resolved = agent.owner && GUID.test(agent.owner) ? owners.get(agent.owner) : undefined;
+    return {
+      ...agent,
+      owner:
+        agent.owner && GUID.test(agent.owner) ? (resolved?.name ?? null) : agent.owner,
+      // Only ever set when Graph explicitly said the account is disabled -
+      // an unresolved owner stays an orphan, never a guess either way.
+      ...(resolved?.accountEnabled === false ? { ownerDisabled: true } : {}),
+      location:
+        agent.location && environmentNames.has(agent.location)
+          ? environmentNames.get(agent.location)!
+          : agent.location,
+    };
+  });
 
   return {
     fetchedAt: discovery.fetchedAt,
@@ -72,6 +85,7 @@ export async function buildEstate(opts?: { environmentId?: string }): Promise<Es
     agents,
     ownersResolvable,
     orphans: agents.filter((a) => !a.owner),
+    disabledOwners: agents.filter((a) => a.ownerDisabled === true),
   };
 }
 

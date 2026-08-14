@@ -22,6 +22,7 @@ import { ok, partial, notConnected, failed, toMcpContent, type SourceReport, typ
 import { readerConfigured } from '../lib/config.js';
 import { buildEstate, unreadStores } from '../domain/estate.js';
 import { findDuplicateClusters } from '../domain/clusters.js';
+import { buildConsolidationSvg } from '../lib/diagram.js';
 import { getAgentConsumption } from '../connectors/consumption.js';
 import { resolveRates } from '../domain/rates.js';
 import { summarisePerAgent, projectedMonthly } from '../domain/projections.js';
@@ -88,6 +89,8 @@ export interface ConsolidationPlanData {
   actions: string[];
   /** A brief the administrator can send to agent owners as-is. */
   markdownBrief: string;
+  /** Before/after bar as self-contained SVG - present when clusters exist. */
+  svg?: string;
 }
 
 function renderBrief(
@@ -318,6 +321,9 @@ export async function consolidationPlan(args: {
     ...(savingUnavailableReason ? { savingUnavailableReason } : {}),
     actions,
     markdownBrief: renderBrief(clusters, estate.orphans.length, estate.fetchedAt, saving),
+    ...(clusters.length > 0
+      ? { svg: buildConsolidationSvg(estate.agents.length, agentsToRetire) }
+      : {}),
   };
 
   const summary =
@@ -352,6 +358,9 @@ export const consolidationPlanTool = {
     description:
       'Find duplicate agents, choose the canonical one to keep in each cluster, and draft the merge, retire and ownership actions as a brief that can be sent to agent owners, including what the retired agents actually consume. Read-only - it never merges or deletes anything.',
     inputSchema: consolidationPlanInput,
+    // Read-only, stated machine-readably: Cowork (and progressively Copilot)
+    // treats unannotated tools as destructive and demands confirmation.
+    annotations: { title: 'Draft a consolidation plan', readOnlyHint: true, destructiveHint: false },
   },
   handler: async (args: { minClusterSize?: number; days?: number }) =>
     toMcpContent(await consolidationPlan(args)),
