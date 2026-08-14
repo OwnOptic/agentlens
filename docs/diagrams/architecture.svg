@@ -60,7 +60,9 @@
 
   <!-- Reader fans out along a horizontal bus to six sources, three columns x two rows -->
   <line x1="590" y1="164" x2="590" y2="188" stroke="#F26F21" stroke-width="1.5"/>
-  <line x1="120" y1="188" x2="570" y2="188" stroke="#F26F21" stroke-width="1.5"/>
+  <line x1="120" y1="188" x2="590" y2="188" stroke="#F26F21" stroke-width="1.5"/>
+  <line x1="230" y1="188" x2="230" y2="298" stroke="#F26F21" stroke-width="1.5"/>
+  <line x1="120" y1="298" x2="570" y2="298" stroke="#F26F21" stroke-width="1.5"/>
 
   <!-- Row A: three drops from the bus, at each column's centre (120 / 340 / 570) -->
   <line x1="120" y1="188" x2="120" y2="216" stroke="#F26F21" stroke-width="1.5" marker-end="url(#arrowOrange)"/>
@@ -85,9 +87,9 @@
   </g>
 
   <!-- Row B: three more drops, straight down from row A into row B -->
-  <line x1="120" y1="284" x2="120" y2="312" stroke="#F26F21" stroke-width="1.5" marker-end="url(#arrowOrange)"/>
-  <line x1="340" y1="284" x2="340" y2="312" stroke="#F26F21" stroke-width="1.5" marker-end="url(#arrowOrange)"/>
-  <line x1="570" y1="284" x2="570" y2="312" stroke="#F26F21" stroke-width="1.5" marker-end="url(#arrowOrange)"/>
+  <line x1="120" y1="298" x2="120" y2="312" stroke="#F26F21" stroke-width="1.5" marker-end="url(#arrowOrange)"/>
+  <line x1="340" y1="298" x2="340" y2="312" stroke="#F26F21" stroke-width="1.5" marker-end="url(#arrowOrange)"/>
+  <line x1="570" y1="298" x2="570" y2="312" stroke="#F26F21" stroke-width="1.5" marker-end="url(#arrowOrange)"/>
 
   <g font-size="13">
     <rect x="20" y="314" width="200" height="70" rx="10" fill="#FFFFFF" stroke="#2A3B4E" stroke-width="1.25"/>
