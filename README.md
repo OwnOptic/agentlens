@@ -1,3 +1,5 @@
+![AgentLens - govern every AI agent in your Microsoft 365 tenant. By Elliot Margot, Microsoft MVP.](docs/brand-header.svg)
+
 # AgentLens
 
 [![CI](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml/badge.svg)](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml)
