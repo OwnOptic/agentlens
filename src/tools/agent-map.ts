@@ -31,11 +31,79 @@ export const agentMapInput = {
 };
 
 export interface AgentMapData {
-  /** Self-contained SVG source. Save as .svg or embed directly; no runtime needed. */
+  /**
+   * Mermaid source, for the chat surface: Microsoft 365 Copilot renders a
+   * ```mermaid fence as a diagram inline. The agent presents THIS field in
+   * chat, never an improvised text drawing.
+   */
+  mermaid: string;
+  /** Self-contained SVG source, for documents and exports. Save as .svg; no runtime needed. */
   svg: string;
   legend: string;
   nodeCount: number;
   storesNotRead: string[];
+}
+
+/** Mermaid node labels cannot contain quotes or brackets. */
+function mesc(text: string): string {
+  return text.replace(/["[\]{}()]/g, '').replace(/\|/g, '-');
+}
+
+function buildMermaid(estate: Estate, groupBy: 'store' | 'environment'): string {
+  const lines: string[] = ['flowchart TB'];
+  const readStores = estate.discovery.sources.filter((s) => s.status === 'ok');
+  const total = readStores.reduce((n, s) => n + s.count, 0);
+
+  lines.push(`  tenant["Tenant<br/>${total} agents read"]`);
+
+  if (groupBy === 'store') {
+    estate.discovery.sources.forEach((source, i) => {
+      const id = `s${i}`;
+      if (source.status === 'ok') {
+        lines.push(`  ${id}["${mesc(source.label)}<br/>${source.count}"]`);
+        lines.push(`  tenant --> ${id}`);
+        lines.push(`  class ${id} read;`);
+      } else {
+        // Deliberately not "0" - we did not read this store.
+        lines.push(`  ${id}["${mesc(source.label)}<br/>not connected"]`);
+        lines.push(`  tenant --> ${id}`);
+        lines.push(`  class ${id} unread;`);
+      }
+    });
+  } else {
+    const byLocation = new Map<string, number>();
+    for (const agent of estate.agents) {
+      const key = agent.location ?? 'Location unknown';
+      byLocation.set(key, (byLocation.get(key) ?? 0) + 1);
+    }
+    [...byLocation.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .forEach(([location, count], i) => {
+        lines.push(`  e${i}["${mesc(location)}<br/>${count}"]`);
+        lines.push(`  tenant --> e${i}`);
+        lines.push(`  class e${i} read;`);
+      });
+  }
+
+  const clusters = findDuplicateClusters(estate.agents);
+  if (estate.orphans.length > 0) {
+    lines.push(`  orphans["No resolvable owner<br/>${estate.orphans.length}"]`);
+    lines.push('  tenant --> orphans');
+    lines.push('  class orphans risk;');
+  }
+  if (clusters.length > 0) {
+    const duplicated = clusters.reduce((n, c) => n + c.agents.length, 0);
+    lines.push(`  dupes["Duplicate clusters<br/>${clusters.length} covering ${duplicated}"]`);
+    lines.push('  tenant --> dupes');
+    lines.push('  class dupes risk;');
+  }
+
+  lines.push('  classDef read fill:#e8f4ea,stroke:#2f855a,color:#1a202c;');
+  lines.push('  classDef unread fill:#f0f0f0,stroke:#a0aec0,color:#4a5568,stroke-dasharray: 4 3;');
+  lines.push('  classDef risk fill:#fdf0e6,stroke:#f26f21,color:#1a202c;');
+
+  return lines.join('\n');
 }
 
 /** XML-escape a label for use inside SVG text nodes and attributes. */
@@ -202,6 +270,7 @@ export async function agentMap(args: {
   const { svg, nodeCount } = buildSvg(estate, args.groupBy ?? 'store');
 
   const data: AgentMapData = {
+    mermaid: buildMermaid(estate, args.groupBy ?? 'store'),
     svg,
     legend:
       'Green nodes were read from the tenant and the number is the agent count. ' +
@@ -226,7 +295,7 @@ export const agentMapTool = {
   config: {
     title: 'Map my agents',
     description:
-      'Render the agent estate as a self-contained SVG diagram: the four stores with their counts, and the findings worth acting on such as orphaned agents and duplicate clusters. Stores that could not be read are drawn dashed and labelled "not connected" rather than shown as zero. Save the svg field as a .svg file or embed it directly. Read-only.',
+      'Render the agent estate as a diagram: the four stores with their counts, and the findings worth acting on such as orphaned agents and duplicate clusters. Stores that could not be read are labelled "not connected" rather than shown as zero. PRESENTATION: put the mermaid field inside a ```mermaid code fence so the chat renders it as a diagram - never redraw the map as ASCII art or plain text. Offer the svg field as a file for documents and exports. Read-only.',
     inputSchema: agentMapInput,
   },
   handler: async (args: { groupBy?: 'store' | 'environment' }) => toMcpContent(await agentMap(args)),
