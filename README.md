@@ -3,6 +3,9 @@
 # AgentLens
 
 [![CI](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml/badge.svg)](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml)
+[![Licence: source-available](https://img.shields.io/badge/licence-source--available-2A3B4E)](LICENSE.md)
+[![Surface: Microsoft 365 Copilot](https://img.shields.io/badge/surface-Microsoft%20365%20Copilot-F26F21)](docs/INSTALL.md)
+[![Posture: read-only](https://img.shields.io/badge/tenant%20access-read--only-2f855a)](docs/APP-REGISTRATIONS.md)
 
 A Microsoft 365 Copilot agent that audits the AI agents in your tenant.
 
@@ -20,8 +23,13 @@ you  ->  AgentLens declarative agent   (agent/)     what you talk to in Copilot
 ```
 
 Two pieces, one repo. The agent package is the conversational surface; the MCP
-server is everything behind it. Full diagram, with the read-only and
-unreadable-≠-zero guarantees called out: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#the-shape-of-it).
+server is everything behind it.
+
+![Architecture: the declarative agent calls the MCP server over Entra SSO; the server reads five upstream APIs through one read-only service principal. Sources that cannot be read are reported as not connected, never as zero.](docs/diagrams/architecture.svg)
+
+The full walkthrough of this diagram, with the read-only and
+unreadable-is-not-zero guarantees called out:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#the-shape-of-it).
 
 ---
 
@@ -39,7 +47,9 @@ unreadable-≠-zero guarantees called out: [docs/ARCHITECTURE.md](docs/ARCHITECT
 - [Configuration](#configuration)
 - [Repo layout](#repo-layout)
 - [Troubleshooting](#troubleshooting)
+- [Documentation](#documentation)
 - [Handover](#handover)
+- [Licence](#licence)
 
 ---
 
@@ -203,8 +213,13 @@ every question - the action points at nothing.
 **Fastest path: let Claude do it.** Open this repo with Claude Code and say
 *"install AgentLens and guide me."* It follows [CLAUDE.md](CLAUDE.md), runs every
 scriptable step, stops at each gate with the exact click-path, packages the zip
-with the right endpoint baked in, and hands it to you to upload. You do six
-things; it does the rest.
+with the right endpoint baked in, and hands it to you to upload. You do **two**
+things - the Entra SSO auth config and the upload; it does the rest.
+
+The whole flow at a glance - what is scripted, where the two gates are, and
+the check that proves each step landed:
+
+![The AgentLens install: 12 steps in four phases - identity, tenant access, deploy, agent - of which only two need a signed-in human. Every step carries the check that proves it worked.](docs/install-process.svg)
 
 **Or run the installer yourself:**
 
@@ -552,6 +567,29 @@ Development: `npm run dev` (watch), `npm run type-check`, `npm run build`,
 
 Every error a real install has hit, with its fix:
 [docs/INSTALL-TROUBLESHOOTING.md](docs/INSTALL-TROUBLESHOOTING.md).
+
+---
+
+## Documentation
+
+Everything in `docs/`, by the question it answers:
+
+| You want to know | Read |
+|---|---|
+| How do I install it, step by step, with proof each step worked? | [docs/INSTALL.md](docs/INSTALL.md) |
+| What went wrong, and what is the fix? | [docs/INSTALL-TROUBLESHOOTING.md](docs/INSTALL-TROUBLESHOOTING.md) |
+| How do I run it after day one - update, rotate secrets, extend it? | [docs/MAINTAINING.md](docs/MAINTAINING.md) |
+| How is it built, and what guarantees does it make? | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| How do I deploy it repeatably across tenants? | [docs/DEPLOY.md](docs/DEPLOY.md) |
+| What exactly can each identity do, and why two of them? | [docs/APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md) |
+| What are the rules for changing the code? | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| How does an AI assistant drive this repo? | [CLAUDE.md](CLAUDE.md) |
+| Under what terms did I receive this? | [LICENSE.md](LICENSE.md) |
+
+Diagrams, all hand-authored SVG:
+[architecture](docs/diagrams/architecture.svg) ·
+[the install at a glance](docs/install-process.svg) ·
+[the two cost figures, never summed](docs/diagrams/cost-model.svg)
 
 ---
 
