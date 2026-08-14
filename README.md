@@ -582,5 +582,15 @@ Three things to do at handover, not after:
   config, a Teams admin for upload rights) - they are the only scheduled
   human dependencies in a redeploy.
 
+---
+
+## Licence
+
+Source-available, internal deployment: the receiving organization may deploy,
+operate and modify AgentLens within its own tenant; redistribution and
+offering it as a service require written permission. Full terms:
+[LICENSE.md](LICENSE.md). A statement of work between the parties prevails
+where the two conflict.
+
 Enable developer mode in Copilot to see tool calls and auth errors in the debug
 card.
