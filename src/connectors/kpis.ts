@@ -28,11 +28,28 @@ interface KpiAggregateRow {
 
 export interface KpiResult {
   kpis: ConversationKpi[];
-  /** Org URLs that were read successfully. */
+  /** Org URLs that were read successfully (including those with no KPI table - see noKpiTable). */
   reached: string[];
+  /**
+   * Org URLs that were REACHABLE but where the msdyn_conversationkpis table does
+   * not exist. Dataverse provisions that table on first Copilot Studio use, so
+   * its absence means "no Copilot Studio usage has ever been recorded here" -
+   * a genuine zero, NOT a connection failure. Conflating the two would violate
+   * the zero-vs-unknown rule in the other direction: reporting a readable
+   * environment as unreadable.
+   */
+  noKpiTable: string[];
   /** Org URLs that could not be read, with the reason. Never counted as zero. */
   failed: { orgUrl: string; reason: string }[];
 }
+
+/**
+ * Sentinel error for "the org answered, the KPI table is not provisioned".
+ * fetchODataAll reports the HTTP status in its message; a 404 on this fixed,
+ * known-good path means the entity set itself is absent (Dataverse error
+ * 0x80060888, "Resource not found for the segment").
+ */
+class KpiTableAbsentError extends Error {}
 
 async function fetchForOrg(orgUrl: string, days: number): Promise<ConversationKpi[]> {
   const token = await getDataverseToken(orgUrl);
@@ -58,7 +75,14 @@ async function fetchForOrg(orgUrl: string, days: number): Promise<ConversationKp
     `${orgUrl.replace(/\/$/, '')}/api/data/v9.2/msdyn_conversationkpis` +
     `?$apply=${apply}&$filter=${filter}`;
 
-  const { rows } = await fetchODataAll<KpiAggregateRow>(url, token);
+  const { rows } = await fetchODataAll<KpiAggregateRow>(url, token).catch((err) => {
+    if (err instanceof Error && err.message.includes('[404]')) {
+      throw new KpiTableAbsentError(
+        'msdyn_conversationkpis does not exist in this environment - Copilot Studio has never recorded usage here.',
+      );
+    }
+    throw err;
+  });
 
   return rows.map((row): ConversationKpi => {
     const sessions = row.sessions ?? 0;
@@ -80,13 +104,19 @@ async function fetchForOrg(orgUrl: string, days: number): Promise<ConversationKp
 export async function getConversationKpis(orgUrls: string[], days = 30): Promise<KpiResult> {
   const settled = await Promise.allSettled(orgUrls.map((u) => fetchForOrg(u, days)));
 
-  const result: KpiResult = { kpis: [], reached: [], failed: [] };
+  const result: KpiResult = { kpis: [], reached: [], noKpiTable: [], failed: [] };
 
   settled.forEach((outcome, i) => {
     const orgUrl = orgUrls[i]!;
     if (outcome.status === 'fulfilled') {
       result.kpis.push(...outcome.value);
       result.reached.push(orgUrl);
+    } else if (outcome.reason instanceof KpiTableAbsentError) {
+      // Reachable, zero recorded usage. Counts as reached - the environment
+      // answered - and is reported separately so the tool can say why the
+      // usage is zero rather than implying a connection problem.
+      result.reached.push(orgUrl);
+      result.noKpiTable.push(orgUrl);
     } else {
       result.failed.push({
         orgUrl,

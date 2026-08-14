@@ -181,17 +181,25 @@ export async function valueAndCost(args: {
 
   const usageConnected = usage.reached.length > 0;
 
+  // Report Dataverse PER ENVIRONMENT. Three distinct states, never conflated:
+  // read with data, reachable-but-never-used (KPI table not provisioned), and
+  // genuinely unreadable. An aggregate "could not read N environments" hides
+  // which ones, and worse, lumps a readable empty environment in with a 403.
+  const perEnv: string[] = [];
+  for (const org of usage.reached) {
+    perEnv.push(
+      usage.noKpiTable.includes(org)
+        ? `${org}: reachable, no Copilot Studio usage ever recorded (KPI table not provisioned)`
+        : `${org}: read`,
+    );
+  }
+  for (const f of usage.failed) perEnv.push(`${f.orgUrl}: UNREADABLE - ${f.reason}`);
+
   const sources: SourceReport[] = [
     {
       source: 'Dataverse',
       status: usageConnected ? (usage.failed.length > 0 ? 'partial' : 'connected') : 'not_connected',
-      ...(usage.failed.length > 0
-        ? {
-            detail: `Could not read ${usage.failed.length} environment(s): ${usage.failed
-              .map((f) => `${f.orgUrl} - ${f.reason}`)
-              .join('; ')}`,
-          }
-        : {}),
+      detail: perEnv.join('; '),
     },
     {
       source: 'Power Platform Licensing API',
@@ -353,6 +361,12 @@ export async function valueAndCost(args: {
   const parts: string[] = [
     `Over ${windowDays} days: ${data.agentsWithUsageData} of ${data.agentsAssessed} agents had readable adoption, ${data.zeroUsageAgents} had zero sessions.`,
   ];
+
+  if (usage.noKpiTable.length > 0) {
+    parts.push(
+      `${usage.noKpiTable.length} of ${config.dataverseOrgUrls.length} environment(s) have never recorded Copilot Studio usage (KPI table not provisioned) - reachable, genuinely zero, not a connection problem.`,
+    );
+  }
 
   if (consumption.state === 'connected') {
     parts.push(

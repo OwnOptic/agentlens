@@ -1,3 +1,7 @@
+#Requires -Version 7
+# Windows PowerShell 5.1 cannot run this script: it relies on PS7 behaviour
+# (native stderr handling, ConvertFrom-Json -AsHashtable). Without this directive
+# it dies mid-run with a NativeCommandError that looks like a tenant problem.
 <#
 .SYNOPSIS
     Provisions the AgentLens-MCP Entra app registration used by the AgentLens

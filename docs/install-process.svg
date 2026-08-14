@@ -144,7 +144,7 @@
 
   <!-- ===================== 4 - HOW YOU INSTALL IT ===================== -->
   <rect x="40" y="860" width="1580" height="36" rx="6" fill="#4f46e5"/>
-  <text x="60" y="884" fill="#FFFFFF" font-size="15" font-weight="700">4 &#183; HOW YOU INSTALL IT - 12 steps, of which 6 need a signed-in human</text>
+  <text x="60" y="884" fill="#FFFFFF" font-size="15" font-weight="700">4 &#183; HOW YOU INSTALL IT - 12 steps, of which only 2 need a signed-in human</text>
 
   <text x="40" y="922" font-size="14" fill="#4b5563">Work left to right. A <tspan font-weight="700" fill="#4f46e5">&#128274; gate</tspan> is a step Microsoft requires a person for - everything else is scripted. Each step lists the check that proves it worked.</text>
 
@@ -163,9 +163,9 @@
     <text x="60" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; az ad app list --display-name AgentLens-Reader</text>
     <text x="60" y="1068" font-size="12" fill="#4b5563">Skip it and nothing else works.</text>
 
-    <rect x="40" y="1094" width="372" height="106" rx="8" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
-    <text x="60" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">2 &#128274; Graph admin consent</text>
-    <text x="60" y="1142" font-size="12.5" fill="#4b5563">Grants User.Read.All. Needs a Global Admin.</text>
+    <rect x="40" y="1094" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="60" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">2 &#183; Graph admin consent</text>
+    <text x="60" y="1142" font-size="12.5" fill="#4b5563">Grants User.Read.All. Scripted, as a Global Admin.</text>
     <text x="60" y="1166" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; no &#8220;Not granted&#8221; on API permissions</text>
     <text x="60" y="1186" font-size="12" fill="#4b5563">Skip: every agent is reported as an orphan.</text>
 
@@ -178,21 +178,21 @@
 
   <!-- B -->
   <g>
-    <rect x="452" y="976" width="372" height="106" rx="8" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
-    <text x="472" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">4 &#128274; Power Platform Admin</text>
-    <text x="472" y="1024" font-size="12.5" fill="#4b5563">Directory role on the service principal.</text>
+    <rect x="452" y="976" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="472" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">4 &#183; Power Platform Admin</text>
+    <text x="472" y="1024" font-size="12.5" fill="#4b5563">Directory role, scripted via the roleAssignments API.</text>
     <text x="472" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">Skip: ARG returns ZERO ROWS AND NO ERROR</text>
     <text x="472" y="1068" font-size="12" fill="#4b5563">Looks identical to a tenant with no agents.</text>
 
-    <rect x="452" y="1094" width="372" height="106" rx="8" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
-    <text x="472" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">5 &#128274; PowerApps management app</text>
-    <text x="472" y="1142" font-size="12.5" fill="#4b5563">New-PowerAppManagementApp, USER context.</text>
+    <rect x="452" y="1094" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="472" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">5 &#183; PowerApps management app</text>
+    <text x="472" y="1142" font-size="12.5" fill="#4b5563">A plain BAP API PUT, in a signed-in user session.</text>
     <text x="472" y="1166" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; dlp_posture returns policies, not 403</text>
-    <text x="472" y="1186" font-size="12" fill="#4b5563">An SP cannot register itself.</text>
+    <text x="472" y="1186" font-size="12" fill="#4b5563">An SP cannot register itself; you can.</text>
 
-    <rect x="452" y="1212" width="372" height="106" rx="8" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
-    <text x="472" y="1236" font-size="14" font-weight="700" fill="#2A3B4E">6 &#128274; Application User</text>
-    <text x="472" y="1260" font-size="12.5" fill="#4b5563">One per Dataverse environment you want.</text>
+    <rect x="452" y="1212" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="472" y="1236" font-size="14" font-weight="700" fill="#2A3B4E">6 &#183; Application User + minimal role</text>
+    <text x="472" y="1260" font-size="12.5" fill="#4b5563">Scripted per environment. Never System Administrator.</text>
     <text x="472" y="1284" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; environment listed as reached, not failed</text>
     <text x="472" y="1304" font-size="12" fill="#4b5563">Skip: unreadable, NOT zero usage.</text>
 
@@ -233,28 +233,28 @@
   <!-- D -->
   <g>
     <rect x="1276" y="976" width="344" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
-    <text x="1296" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">10 &#183; Package the zip</text>
-    <text x="1296" y="1024" font-size="12.5" fill="#4b5563">The MCP URL is baked in at this moment.</text>
-    <text x="1296" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">URL ends in /mcp &#183; AGENT_APP_ID stays stable</text>
-    <text x="1296" y="1068" font-size="12" fill="#4b5563">A new GUID makes a 2nd app, not an update.</text>
+    <text x="1296" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">10 &#128274; Secure the endpoint FIRST</text>
+    <text x="1296" y="1024" font-size="12.5" fill="#4b5563">SSO app (scripted) + portal auth config (gate).</text>
+    <text x="1296" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; /health &#8594; authEnabled: true &#183; no token &#8594; 401</text>
+    <text x="1296" y="1068" font-size="12" fill="#4b5563">Until then anyone with the URL reads your tenant.</text>
 
     <rect x="1276" y="1094" width="344" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
-    <text x="1296" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">Validate before you upload</text>
-    <text x="1296" y="1142" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; npm run validate:agent exits 0</text>
-    <text x="1296" y="1166" font-size="12" fill="#4b5563">A rejected upload gives a generic error with no</text>
-    <text x="1296" y="1184" font-size="12" fill="#4b5563">line number. This names the broken field.</text>
+    <text x="1296" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">11 &#183; Package once, validate</text>
+    <text x="1296" y="1142" font-size="12.5" fill="#4b5563">URL + auth config baked in. AGENT_APP_ID stable.</text>
+    <text x="1296" y="1166" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; npm run validate:agent exits 0</text>
+    <text x="1296" y="1184" font-size="12" fill="#4b5563">It names the broken field; the upload error will not.</text>
 
     <rect x="1276" y="1212" width="344" height="106" rx="8" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
-    <text x="1296" y="1236" font-size="14" font-weight="700" fill="#2A3B4E">11 &#128274; Upload the zip</text>
+    <text x="1296" y="1236" font-size="14" font-weight="700" fill="#2A3B4E">12 &#128274; Upload the zip</text>
     <text x="1296" y="1260" font-size="12.5" fill="#4b5563">m365.cloud.microsoft/chat &#8594; Agents &#8594; Add agent</text>
     <text x="1296" y="1284" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; ask it to sweep, check against PPAC</text>
     <text x="1296" y="1304" font-size="12" fill="#4b5563">Needs custom app upload on in Teams admin.</text>
 
-    <rect x="1276" y="1330" width="344" height="106" rx="8" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
-    <text x="1296" y="1354" font-size="14" font-weight="700" fill="#2A3B4E">12 &#128274; Secure the endpoint</text>
-    <text x="1296" y="1378" font-size="12.5" fill="#4b5563">Entra SSO auth config, then re-package.</text>
-    <text x="1296" y="1402" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; /health &#8594; authEnabled: true</text>
-    <text x="1296" y="1422" font-size="12" fill="#4b5563">Do not stop before this one.</text>
+    <rect x="1276" y="1330" width="344" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="1296" y="1354" font-size="14" font-weight="700" fill="#2A3B4E">Smoke test</text>
+    <text x="1296" y="1378" font-size="12.5" fill="#4b5563">&#8220;Sweep every agent store&#8221; &#8594; check vs PPAC.</text>
+    <text x="1296" y="1402" font-size="12.5" fill="#F26F21" font-weight="600">Ungranted stores say not_connected, never zero</text>
+    <text x="1296" y="1422" font-size="12" fill="#4b5563">No answer at all = the M365 Copilot licence.</text>
   </g>
 
   <g stroke="#94a3b8" stroke-width="2" marker-end="url(#arwl)" fill="none">
@@ -263,7 +263,7 @@
 
   <!-- ===================== 5 - WHAT EACH SKIPPED GATE COSTS ===================== -->
   <rect x="40" y="1470" width="1580" height="36" rx="6" fill="#4f46e5"/>
-  <text x="60" y="1494" fill="#FFFFFF" font-size="15" font-weight="700">5 &#183; WHAT EACH SKIPPED GATE COSTS</text>
+  <text x="60" y="1494" fill="#FFFFFF" font-size="15" font-weight="700">5 &#183; WHAT EACH SKIPPED STEP COSTS</text>
 
   <rect x="40" y="1522" width="1580" height="182" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
   <text x="64" y="1550" font-size="13.5" fill="#4b5563">None of these produces a <tspan font-weight="700" fill="#2A3B4E">wrong</tspan> number. Each produces a <tspan font-weight="600" fill="#4f46e5">not_connected</tspan> source with the fix attached - which is the design working, and still worse than having the data.</text>
@@ -286,7 +286,7 @@
     <text x="602" y="1624" fill="#2A3B4E" font-weight="600">Billing policy (7)</text>
     <text x="824" y="1624" fill="#4b5563">no per-agent cost, no savings line</text>
     <rect x="588" y="1640" width="500" height="30" rx="4" fill="#FFFFFF" stroke="#e5e7eb"/>
-    <text x="602" y="1660" fill="#2A3B4E" font-weight="600">SSO auth config (12)</text>
+    <text x="602" y="1660" fill="#2A3B4E" font-weight="600">SSO auth config (10)</text>
     <text x="824" y="1660" fill="#4b5563">authEnabled false - endpoint open</text>
 
     <rect x="1112" y="1568" width="484" height="118" rx="4" fill="#eef2ff" stroke="#4f46e5" stroke-dasharray="4 3"/>
