@@ -1,0 +1,315 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1900" width="1660" height="1900" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <defs>
+    <symbol id="ic-key" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2L11 12"/><path d="M15 8l2 2"/><path d="M17 6l2 2"/></g></symbol>
+    <symbol id="ic-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C12 22 4 17 4 10V5l8-3 8 3v5c0 7-8 12-8 12z"/><polyline points="9,12 11,14 15,10"/></g></symbol>
+    <symbol id="ic-code" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/><line x1="14" y1="4" x2="10" y2="20"/></g></symbol>
+    <symbol id="ic-document" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></g></symbol>
+    <symbol id="ic-settings" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></g></symbol>
+    <symbol id="ic-database" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v4c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 9v4c0 1.657 4.03 3 9 3s9-1.343 9-3V9"/><path d="M3 13v4c0 1.657 4.03 3 9 3s9-1.343 9-3v-4"/></g></symbol>
+    <symbol id="ic-gauge" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17a9 9 0 1 1 18 0"/><path d="M12 17l4.5-5"/><circle cx="12" cy="17" r="1.4" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="ic-target" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="ic-warning" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.8" fill="currentColor" stroke="none"/></g></symbol>
+    <symbol id="ic-person" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></g></symbol>
+    <symbol id="ic-puzzle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11V9a2 2 0 0 0-2-2h-2V5a2 2 0 0 0-4 0v2H9a2 2 0 0 0-2 2v2H5a2 2 0 0 0 0 4h2v2a2 2 0 0 0 2 2h2v2a2 2 0 0 0 4 0v-2h2a2 2 0 0 0 2-2v-2h2a2 2 0 0 0 0-4h-2z"/></g></symbol>
+    <!-- Elliot Margot logo. Orange E, navy M. The M is drawn white here because
+         this header sits on the navy #2A3B4E band, where navy-on-navy vanishes. -->
+    <symbol id="em-logo" viewBox="0 0 110 100">
+      <path d="M15 15H30V85H15z M15 15H50V30H15z M15 42.5H45V57.5H15z M15 70H50V85H15z" fill="#F26F21"/>
+      <path d="M55 85V15L75 50L95 15V85" stroke="#FFFFFF" stroke-width="12"
+            stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </symbol>
+    <marker id="arw" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 z" fill="#F26F21"/></marker>
+    <marker id="arwl" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 z" fill="#94a3b8"/></marker>
+  </defs>
+
+  <rect width="1660" height="1900" fill="#FFFFFF"/>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="1660" height="118" fill="#2A3B4E"/>
+  <rect x="0" y="112" width="1660" height="6" fill="#4f46e5"/>
+  <text x="40" y="52" fill="#FFFFFF" font-size="31" font-weight="700">AgentLens &#183; what it is, and how to install it</text>
+  <text x="40" y="86" fill="#cbd5e1" font-size="16">A Microsoft 365 Copilot agent that audits every AI agent in your tenant. Start at the top if this is new to you.</text>
+  <use href="#em-logo" x="1512" y="28" width="70" height="64"/>
+  <text x="1496" y="52" fill="#FFFFFF" font-size="14" font-weight="600" text-anchor="end">Elliot Margot</text>
+  <text x="1496" y="74" fill="#cbd5e1" font-size="12.5" text-anchor="end">e-margot.ch</text>
+
+  <!-- ===================== 1 - WHAT IT IS ===================== -->
+  <rect x="40" y="150" width="1580" height="36" rx="6" fill="#4f46e5"/>
+  <text x="60" y="174" fill="#FFFFFF" font-size="15" font-weight="700">1 &#183; WHAT IT IS</text>
+
+  <text x="40" y="212" font-size="14" fill="#4b5563">You ask a question in Copilot chat. Four things sit between your question and your tenant. Understanding this chain explains every install step below.</text>
+
+  <g>
+    <rect x="40" y="232" width="268" height="128" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-person" x="60" y="250" width="24" height="24" color="#4f46e5"/>
+    <text x="94" y="262" font-size="15" font-weight="700" fill="#2A3B4E">You</text>
+    <text x="60" y="292" font-size="12.5" fill="#4b5563">Ask in plain English, in the</text>
+    <text x="60" y="310" font-size="12.5" fill="#4b5563">Microsoft 365 Copilot chat.</text>
+    <text x="60" y="336" font-size="12" fill="#F26F21" font-weight="600">&#8220;Sweep every agent store.&#8221;</text>
+
+    <rect x="368" y="232" width="268" height="128" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-document" x="388" y="250" width="24" height="24" color="#4f46e5"/>
+    <text x="422" y="262" font-size="15" font-weight="700" fill="#2A3B4E">The agent</text>
+    <text x="388" y="292" font-size="12.5" fill="#4b5563">agent/ - five files, zero code.</text>
+    <text x="388" y="310" font-size="12.5" fill="#4b5563">Manifests and icons only.</text>
+    <text x="388" y="336" font-size="12" fill="#F26F21" font-weight="600">This is the .zip you upload.</text>
+
+    <rect x="696" y="232" width="268" height="128" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-code" x="716" y="250" width="24" height="24" color="#4f46e5"/>
+    <text x="750" y="262" font-size="15" font-weight="700" fill="#2A3B4E">The MCP server</text>
+    <text x="716" y="292" font-size="12.5" fill="#4b5563">src/ - five read-only tools.</text>
+    <text x="716" y="310" font-size="12.5" fill="#4b5563">Runs in Azure Container Apps.</text>
+    <text x="716" y="336" font-size="12" fill="#F26F21" font-weight="600">All the actual logic lives here.</text>
+
+    <rect x="1024" y="232" width="268" height="128" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-key" x="1044" y="250" width="24" height="24" color="#4f46e5"/>
+    <text x="1078" y="262" font-size="15" font-weight="700" fill="#2A3B4E">AgentLens-Reader</text>
+    <text x="1044" y="292" font-size="12.5" fill="#4b5563">ONE service principal. The only</text>
+    <text x="1044" y="310" font-size="12.5" fill="#4b5563">identity that touches your tenant.</text>
+    <text x="1044" y="336" font-size="12" fill="#F26F21" font-weight="600">Read-only. Never writes.</text>
+
+    <rect x="1352" y="232" width="268" height="128" rx="8" fill="#2A3B4E"/>
+    <use href="#ic-database" x="1372" y="250" width="24" height="24" color="#FDBA74"/>
+    <text x="1406" y="262" font-size="15" font-weight="700" fill="#FFFFFF">Your tenant</text>
+    <text x="1372" y="290" font-size="12" fill="#cbd5e1">Resource Graph &#183; Microsoft Graph</text>
+    <text x="1372" y="308" font-size="12" fill="#cbd5e1">Power Platform admin + governance</text>
+    <text x="1372" y="326" font-size="12" fill="#cbd5e1">Dataverse (aggregate) &#183; Cost Mgmt</text>
+    <text x="1372" y="348" font-size="12" fill="#FDBA74" font-weight="600">Five sources, each may fail alone.</text>
+  </g>
+  <g stroke="#F26F21" stroke-width="2" marker-end="url(#arw)" fill="none">
+    <path d="M312 296 L362 296"/><path d="M640 296 L690 296"/><path d="M968 296 L1018 296"/><path d="M1296 296 L1346 296"/>
+  </g>
+
+  <!-- ===================== 2 - WHAT IT ANSWERS ===================== -->
+  <rect x="40" y="392" width="1580" height="36" rx="6" fill="#4f46e5"/>
+  <text x="60" y="416" fill="#FFFFFF" font-size="15" font-weight="700">2 &#183; WHAT IT ANSWERS - five tools, all read-only</text>
+
+  <g>
+    <rect x="40" y="444" width="308" height="150" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-target" x="60" y="462" width="22" height="22" color="#4f46e5"/>
+    <text x="92" y="474" font-size="14" font-weight="700" fill="#2A3B4E">sweep_inventory</text>
+    <text x="60" y="502" font-size="12.5" fill="#4b5563">Every agent across four stores,</text>
+    <text x="60" y="520" font-size="12.5" fill="#4b5563">with owners, orphans and</text>
+    <text x="60" y="538" font-size="12.5" fill="#4b5563">duplicate clusters.</text>
+    <text x="60" y="566" font-size="12" fill="#F26F21" font-weight="600">Copilot Studio &#183; Agent Builder</text>
+    <text x="60" y="582" font-size="12" fill="#F26F21" font-weight="600">Azure AI Foundry &#183; Fabric</text>
+
+    <rect x="364" y="444" width="308" height="150" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-shield" x="384" y="462" width="22" height="22" color="#4f46e5"/>
+    <text x="416" y="474" font-size="14" font-weight="700" fill="#2A3B4E">dlp_posture</text>
+    <text x="384" y="502" font-size="12.5" fill="#4b5563">Which environments no Data Loss</text>
+    <text x="384" y="520" font-size="12.5" fill="#4b5563">Prevention policy covers, and</text>
+    <text x="384" y="538" font-size="12.5" fill="#4b5563">what that exposes.</text>
+    <text x="384" y="566" font-size="12" fill="#F26F21" font-weight="600">Needs step 5 or it returns 403 -</text>
+    <text x="384" y="582" font-size="12" fill="#F26F21" font-weight="600">never a false &#8220;no policies&#8221;.</text>
+
+    <rect x="688" y="444" width="308" height="150" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-gauge" x="708" y="462" width="22" height="22" color="#4f46e5"/>
+    <text x="740" y="474" font-size="14" font-weight="700" fill="#2A3B4E">value_and_cost</text>
+    <text x="708" y="502" font-size="12.5" fill="#4b5563">Which agents are actually used,</text>
+    <text x="708" y="520" font-size="12.5" fill="#4b5563">what each consumes and costs,</text>
+    <text x="708" y="538" font-size="12.5" fill="#4b5563">and a verdict per agent.</text>
+    <text x="708" y="566" font-size="12" fill="#F26F21" font-weight="600">promote &#183; improve &#183; consolidate</text>
+    <text x="708" y="582" font-size="12" fill="#F26F21" font-weight="600">&#183; retire</text>
+
+    <rect x="1012" y="444" width="290" height="150" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-puzzle" x="1032" y="462" width="22" height="22" color="#4f46e5"/>
+    <text x="1064" y="474" font-size="14" font-weight="700" fill="#2A3B4E">consolidation_plan</text>
+    <text x="1032" y="502" font-size="12.5" fill="#4b5563">Duplicate clusters, which agent</text>
+    <text x="1032" y="520" font-size="12.5" fill="#4b5563">to keep, and a plan you can</text>
+    <text x="1032" y="538" font-size="12.5" fill="#4b5563">send to the owners.</text>
+    <text x="1032" y="566" font-size="12" fill="#F26F21" font-weight="600">You execute it. AgentLens</text>
+    <text x="1032" y="582" font-size="12" fill="#F26F21" font-weight="600">never changes anything.</text>
+
+    <rect x="1318" y="444" width="302" height="150" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <use href="#ic-code" x="1338" y="462" width="22" height="22" color="#4f46e5"/>
+    <text x="1370" y="474" font-size="14" font-weight="700" fill="#2A3B4E">agent_map</text>
+    <text x="1338" y="502" font-size="12.5" fill="#4b5563">A picture of the estate, drawn</text>
+    <text x="1338" y="520" font-size="12.5" fill="#4b5563">from the sweep.</text>
+    <text x="1338" y="548" font-size="12" fill="#F26F21" font-weight="600">A source that could not be read</text>
+    <text x="1338" y="564" font-size="12" fill="#F26F21" font-weight="600">is drawn as a dashed</text>
+    <text x="1338" y="580" font-size="12" fill="#F26F21" font-weight="600">not-connected node.</text>
+  </g>
+
+  <!-- ===================== 3 - THE ONE RULE ===================== -->
+  <rect x="40" y="626" width="1580" height="36" rx="6" fill="#4f46e5"/>
+  <text x="60" y="650" fill="#FFFFFF" font-size="15" font-weight="700">3 &#183; THE ONE RULE - read this before you trust a number</text>
+
+  <rect x="40" y="678" width="1580" height="150" rx="8" fill="#2A3B4E"/>
+  <use href="#ic-warning" x="64" y="700" width="28" height="28" color="#FDBA74"/>
+  <text x="106" y="716" font-size="19" font-weight="700" fill="#FFFFFF">Zero and unknown are different answers.</text>
+  <text x="64" y="756" font-size="14" fill="#cbd5e1">An administrator makes retire-or-keep decisions from this output, and a security reviewer will ask what it can change. Both collapse if one number is invented. So a store</text>
+  <text x="64" y="778" font-size="14" fill="#cbd5e1">that could not be read is <tspan font-weight="700" fill="#FFFFFF">never</tspan> rendered as &#8220;0 agents&#8221;. It is reported as <tspan font-weight="700" fill="#FDBA74">not_connected</tspan>, naming the source, the reason and the fix.</text>
+  <text x="64" y="808" font-size="13" fill="#FDBA74" font-weight="600">Consequences you might mistake for missing features: there is no demo or sample mode, and nothing is ever estimated to make output look complete.</text>
+
+  <!-- ===================== 4 - HOW YOU INSTALL IT ===================== -->
+  <rect x="40" y="860" width="1580" height="36" rx="6" fill="#4f46e5"/>
+  <text x="60" y="884" fill="#FFFFFF" font-size="15" font-weight="700">4 &#183; HOW YOU INSTALL IT - 12 steps, of which only 2 need a signed-in human</text>
+
+  <text x="40" y="922" font-size="14" fill="#4b5563">Work left to right. A <tspan font-weight="700" fill="#4f46e5">&#128274; gate</tspan> is a step Microsoft requires a person for - everything else is scripted. Each step lists the check that proves it worked.</text>
+
+  <g font-size="14" font-weight="700" fill="#2A3B4E">
+    <text x="40" y="962">A &#183; IDENTITY</text>
+    <text x="452" y="962">B &#183; TENANT ACCESS</text>
+    <text x="864" y="962">C &#183; DEPLOY</text>
+    <text x="1276" y="962">D &#183; THE AGENT</text>
+  </g>
+
+  <!-- A -->
+  <g>
+    <rect x="40" y="976" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="60" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">1 &#183; AgentLens-Reader app</text>
+    <text x="60" y="1024" font-size="12.5" fill="#4b5563">Creates the one identity that reads your tenant.</text>
+    <text x="60" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; az ad app list --display-name AgentLens-Reader</text>
+    <text x="60" y="1068" font-size="12" fill="#4b5563">Skip it and nothing else works.</text>
+
+    <rect x="40" y="1094" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="60" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">2 &#183; Graph admin consent</text>
+    <text x="60" y="1142" font-size="12.5" fill="#4b5563">Grants User.Read.All. Scripted, as a Global Admin.</text>
+    <text x="60" y="1166" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; no &#8220;Not granted&#8221; on API permissions</text>
+    <text x="60" y="1186" font-size="12" fill="#4b5563">Skip: every agent is reported as an orphan.</text>
+
+    <rect x="40" y="1212" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="60" y="1236" font-size="14" font-weight="700" fill="#2A3B4E">3 &#183; Azure RBAC</text>
+    <text x="60" y="1260" font-size="12.5" fill="#4b5563">Reader + Cost Management Reader on the sub.</text>
+    <text x="60" y="1284" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; az role assignment list --assignee $SP</text>
+    <text x="60" y="1304" font-size="12" fill="#4b5563">Skip: no Resource Graph, no spend.</text>
+  </g>
+
+  <!-- B -->
+  <g>
+    <rect x="452" y="976" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="472" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">4 &#183; Power Platform Admin</text>
+    <text x="472" y="1024" font-size="12.5" fill="#4b5563">Directory role, scripted via the roleAssignments API.</text>
+    <text x="472" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">Skip: ARG returns ZERO ROWS AND NO ERROR</text>
+    <text x="472" y="1068" font-size="12" fill="#4b5563">Looks identical to a tenant with no agents.</text>
+
+    <rect x="452" y="1094" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="472" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">5 &#183; PowerApps management app</text>
+    <text x="472" y="1142" font-size="12.5" fill="#4b5563">A plain BAP API PUT, in a signed-in user session.</text>
+    <text x="472" y="1166" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; dlp_posture returns policies, not 403</text>
+    <text x="472" y="1186" font-size="12" fill="#4b5563">An SP cannot register itself; you can.</text>
+
+    <rect x="452" y="1212" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="472" y="1236" font-size="14" font-weight="700" fill="#2A3B4E">6 &#183; Application User + minimal role</text>
+    <text x="472" y="1260" font-size="12.5" fill="#4b5563">Scripted per environment. Never System Administrator.</text>
+    <text x="472" y="1284" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; environment listed as reached, not failed</text>
+    <text x="472" y="1304" font-size="12" fill="#4b5563">Skip: unreadable, NOT zero usage.</text>
+
+    <rect x="452" y="1330" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="472" y="1354" font-size="14" font-weight="700" fill="#2A3B4E">7 &#183; Billing policy ID</text>
+    <text x="472" y="1378" font-size="12.5" fill="#4b5563">Unlocks per-agent consumption, so per-agent cost.</text>
+    <text x="472" y="1402" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; npm run verify:consumption</text>
+    <text x="472" y="1422" font-size="12" fill="#4b5563">Prepaid packs are unmeasured, not free.</text>
+  </g>
+
+  <!-- C -->
+  <g>
+    <rect x="864" y="976" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="884" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">8 &#183; Deploy the MCP server</text>
+    <text x="884" y="1024" font-size="12.5" fill="#4b5563">az containerapp up --source . (builds in Azure).</text>
+    <text x="884" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; read the FQDN back from Azure</text>
+    <text x="884" y="1068" font-size="12" fill="#4b5563">Skip: agent installs, then fails every question.</text>
+
+    <rect x="864" y="1094" width="372" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="884" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">9 &#183; Configure the server</text>
+    <text x="884" y="1142" font-size="12.5" fill="#4b5563">Secret as a SECRET, never a plain env var.</text>
+    <text x="884" y="1166" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; /health &#8594; readerConfigured: true</text>
+    <text x="884" y="1186" font-size="12" fill="#4b5563">Skip: every tool honest, and useless.</text>
+
+    <rect x="864" y="1212" width="372" height="224" rx="8" fill="#f9fafb" stroke="#4f46e5" stroke-dasharray="4 3"/>
+    <use href="#ic-gauge" x="884" y="1230" width="24" height="24" color="#4f46e5"/>
+    <text x="918" y="1242" font-size="14" font-weight="700" fill="#2A3B4E">/health is how you check it</text>
+    <text x="884" y="1272" font-size="12.5" fill="#4b5563">Two facts, not opinions. Curl it any time:</text>
+    <rect x="884" y="1288" width="332" height="30" rx="4" fill="#2A3B4E"/>
+    <text x="896" y="1308" font-size="12" fill="#FDBA74" font-family="Consolas, monospace">curl https://&lt;fqdn&gt;/health</text>
+    <text x="884" y="1342" font-size="12.5" fill="#F26F21" font-weight="600">readerConfigured</text>
+    <text x="884" y="1360" font-size="12" fill="#4b5563">true once step 9 lands - it can read your tenant</text>
+    <text x="884" y="1384" font-size="12.5" fill="#F26F21" font-weight="600">authEnabled</text>
+    <text x="884" y="1402" font-size="12" fill="#4b5563">false until step 12 - until then ANYONE with</text>
+    <text x="884" y="1418" font-size="12" fill="#4b5563">the URL can query your tenant</text>
+  </g>
+
+  <!-- D -->
+  <g>
+    <rect x="1276" y="976" width="344" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="1296" y="1000" font-size="14" font-weight="700" fill="#2A3B4E">10 &#128274; Secure the endpoint FIRST</text>
+    <text x="1296" y="1024" font-size="12.5" fill="#4b5563">SSO app (scripted) + portal auth config (gate).</text>
+    <text x="1296" y="1048" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; /health &#8594; authEnabled: true &#183; no token &#8594; 401</text>
+    <text x="1296" y="1068" font-size="12" fill="#4b5563">Until then anyone with the URL reads your tenant.</text>
+
+    <rect x="1276" y="1094" width="344" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="1296" y="1118" font-size="14" font-weight="700" fill="#2A3B4E">11 &#183; Package once, validate</text>
+    <text x="1296" y="1142" font-size="12.5" fill="#4b5563">URL + auth config baked in. AGENT_APP_ID stable.</text>
+    <text x="1296" y="1166" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; npm run validate:agent exits 0</text>
+    <text x="1296" y="1184" font-size="12" fill="#4b5563">It names the broken field; the upload error will not.</text>
+
+    <rect x="1276" y="1212" width="344" height="106" rx="8" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
+    <text x="1296" y="1236" font-size="14" font-weight="700" fill="#2A3B4E">12 &#128274; Upload the zip</text>
+    <text x="1296" y="1260" font-size="12.5" fill="#4b5563">m365.cloud.microsoft/chat &#8594; Agents &#8594; Add agent</text>
+    <text x="1296" y="1284" font-size="12.5" fill="#F26F21" font-weight="600">&#10003; ask it to sweep, check against PPAC</text>
+    <text x="1296" y="1304" font-size="12" fill="#4b5563">Needs custom app upload on in Teams admin.</text>
+
+    <rect x="1276" y="1330" width="344" height="106" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="1296" y="1354" font-size="14" font-weight="700" fill="#2A3B4E">Smoke test</text>
+    <text x="1296" y="1378" font-size="12.5" fill="#4b5563">&#8220;Sweep every agent store&#8221; &#8594; check vs PPAC.</text>
+    <text x="1296" y="1402" font-size="12.5" fill="#F26F21" font-weight="600">Ungranted stores say not_connected, never zero</text>
+    <text x="1296" y="1422" font-size="12" fill="#4b5563">No answer at all = the M365 Copilot licence.</text>
+  </g>
+
+  <g stroke="#94a3b8" stroke-width="2" marker-end="url(#arwl)" fill="none">
+    <path d="M416 1028 L446 1028"/><path d="M828 1028 L858 1028"/><path d="M1240 1028 L1270 1028"/>
+  </g>
+
+  <!-- ===================== 5 - WHAT EACH SKIPPED GATE COSTS ===================== -->
+  <rect x="40" y="1470" width="1580" height="36" rx="6" fill="#4f46e5"/>
+  <text x="60" y="1494" fill="#FFFFFF" font-size="15" font-weight="700">5 &#183; WHAT EACH SKIPPED STEP COSTS</text>
+
+  <rect x="40" y="1522" width="1580" height="182" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="64" y="1550" font-size="13.5" fill="#4b5563">None of these produces a <tspan font-weight="700" fill="#2A3B4E">wrong</tspan> number. Each produces a <tspan font-weight="600" fill="#4f46e5">not_connected</tspan> source with the fix attached - which is the design working, and still worse than having the data.</text>
+
+  <g font-size="13">
+    <rect x="64" y="1568" width="500" height="30" rx="4" fill="#FFFFFF" stroke="#e5e7eb"/>
+    <text x="78" y="1588" fill="#2A3B4E" font-weight="600">Admin consent (2)</text>
+    <text x="300" y="1588" fill="#4b5563">every agent reported as an orphan</text>
+    <rect x="64" y="1604" width="500" height="30" rx="4" fill="#FFFFFF" stroke="#e5e7eb"/>
+    <text x="78" y="1624" fill="#2A3B4E" font-weight="600">Power Platform Admin (4)</text>
+    <text x="300" y="1624" fill="#4b5563">zero Copilot Studio agents, no error</text>
+    <rect x="64" y="1640" width="500" height="30" rx="4" fill="#FFFFFF" stroke="#e5e7eb"/>
+    <text x="78" y="1660" fill="#2A3B4E" font-weight="600">Management app (5)</text>
+    <text x="300" y="1660" fill="#4b5563">dlp_posture 403, with the cmdlet</text>
+
+    <rect x="588" y="1568" width="500" height="30" rx="4" fill="#FFFFFF" stroke="#e5e7eb"/>
+    <text x="602" y="1588" fill="#2A3B4E" font-weight="600">Application User (6)</text>
+    <text x="824" y="1588" fill="#4b5563">those envs unreadable, not zero</text>
+    <rect x="588" y="1604" width="500" height="30" rx="4" fill="#FFFFFF" stroke="#e5e7eb"/>
+    <text x="602" y="1624" fill="#2A3B4E" font-weight="600">Billing policy (7)</text>
+    <text x="824" y="1624" fill="#4b5563">no per-agent cost, no savings line</text>
+    <rect x="588" y="1640" width="500" height="30" rx="4" fill="#FFFFFF" stroke="#e5e7eb"/>
+    <text x="602" y="1660" fill="#2A3B4E" font-weight="600">SSO auth config (10)</text>
+    <text x="824" y="1660" fill="#4b5563">authEnabled false - endpoint open</text>
+
+    <rect x="1112" y="1568" width="484" height="118" rx="4" fill="#eef2ff" stroke="#4f46e5" stroke-dasharray="4 3"/>
+    <text x="1130" y="1592" font-size="13" font-weight="700" fill="#2A3B4E">Licences are separate from install</text>
+    <text x="1130" y="1614" font-size="12.5" fill="#4b5563">A Microsoft 365 Copilot licence is needed to RUN</text>
+    <text x="1130" y="1632" font-size="12.5" fill="#4b5563">the agent. An Agent 365 licence gates the</text>
+    <text x="1130" y="1650" font-size="12.5" fill="#4b5563">Agent Builder store specifically.</text>
+    <text x="1130" y="1668" font-size="12" fill="#F26F21" font-weight="600">Neither is a bug in the install.</text>
+  </g>
+
+  <!-- Legend -->
+  <rect x="40" y="1730" width="1580" height="130" rx="8" fill="#FFFFFF" stroke="#e5e7eb"/>
+  <text x="64" y="1758" font-size="14" font-weight="700" fill="#2A3B4E">HOW TO READ THIS</text>
+
+  <rect x="64" y="1776" width="24" height="18" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="98" y="1790" font-size="13" fill="#4b5563">Scripted - the installer does it for you</text>
+
+  <rect x="480" y="1776" width="24" height="18" rx="4" fill="#FFFFFF" stroke="#F26F21" stroke-width="2"/>
+  <text x="514" y="1790" font-size="13" fill="#4b5563">&#128274; Gate - Microsoft requires a signed-in human</text>
+
+  <text x="1000" y="1790" font-size="13" fill="#F26F21" font-weight="600">&#10003;</text>
+  <text x="1020" y="1790" font-size="13" fill="#4b5563">the check that proves the step landed</text>
+
+  <text x="64" y="1826" font-size="13" fill="#4b5563">A step is <tspan font-weight="700" fill="#2A3B4E">not</tspan> done because a command exited 0. It is done when its effect has been read back from the service. That rule is why this install is slow, and why the</text>
+  <text x="64" y="1846" font-size="13" fill="#4b5563">numbers it finally reports can be trusted.</text>
+</svg>

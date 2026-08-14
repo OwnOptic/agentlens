@@ -6,8 +6,21 @@
 *.tsbuildinfo
 
 # local env files (keep .env.example)
+# NOTE: `.env.*.local` does NOT match `.env.local` - it must be listed explicitly,
+# or a file holding real reader credentials ships to whoever clones this repo.
 .env
+.env.local
 .env.*.local
+
+# Internal working backlog. This repo is handed to clients and admins for install;
+# the backlog is our own planning surface and is deliberately not part of it.
+docs/BACKLOG.md
+
+# Residue from the superseded Next.js stack. Safe to delete from your working copy.
+/.next
+next-env.d.ts
+deploy.zip
+BUILD_SUMMARY.txt
 
 # azd
 .azure/

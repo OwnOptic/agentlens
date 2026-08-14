@@ -34,19 +34,32 @@ breaks without it. Read it before starting.
 5. **Re-run to resume.** The script is idempotent and caches non-secret state in
    `.agentlens-install.json`. A second run picks up where the first stopped.
 
-### The five gates — what you cannot do for them
+### The two gates - what you cannot do for them
 
 | Gate | Why it is theirs |
 |---|---|
-| Graph admin consent | Needs a Global Administrator |
-| Power Platform Administrator role | Needs a Privileged Role Administrator |
-| `New-PowerAppManagementApp` | Must run in a **user** context; a service principal cannot register itself |
-| Application User per Dataverse environment | Per-environment, in the admin center |
-| Entra SSO auth config | No public API — Agents Toolkit or Teams developer portal |
+| Entra SSO auth config | No public API - Agents Toolkit or Teams developer portal only |
 | Uploading the zip | UI action in Microsoft 365 Copilot |
 
-Everything else — app registrations, RBAC, the container deploy, configuration,
-packaging the zip — you do.
+Everything else you do - INCLUDING four steps older docs called gates, all
+scriptable when the signed-in session has the right role (see INSTALL.md for
+the exact commands):
+
+- **Graph admin consent** - `az ad app permission admin-consent` as a Global
+  Administrator; verify by READING `servicePrincipals/<sp>/appRoleAssignments`.
+- **Power Platform Administrator** - `POST /roleManagement/directory/roleAssignments`
+  (works even when the directory role is not activated in a fresh tenant).
+- **The Power Platform management app** - `New-PowerAppManagementApp` is only a
+  wrapper around `PUT https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/adminApplications/<appId>?api-version=2020-10-01`,
+  run in a signed-in USER az session (an SP cannot register itself).
+- **Dataverse Application Users + the minimal role** - the Dataverse Web API
+  (`POST /systemusers`, create the `AgentLens Reader` role, `AddPrivilegesRole`,
+  associate). Never assign System Administrator.
+
+One genuinely manual pre-step when the DEFAULT environment is in scope: the
+installer must grant themselves System Administrator on it in PPAC first -
+Power Platform Administrator does not confer data-plane rights there and no
+public API exposes the grant.
 
 ### Getting the zip right
 

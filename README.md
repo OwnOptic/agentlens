@@ -1,3 +1,5 @@
+![AgentLens - govern every AI agent in your Microsoft 365 tenant. By Elliot Margot, Microsoft MVP.](docs/brand-header.svg)
+
 # AgentLens
 
 [![CI](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml/badge.svg)](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml)
@@ -49,7 +51,7 @@ Five tools, all read-only.
 | `dlp_posture` | Which environments no DLP policy covers, and what that exposes | Power Platform governance + admin APIs |
 | `value_and_cost` | Which agents are actually used, what each one consumes and costs, what Azure invoiced, and a verdict per agent | Dataverse (aggregate), Power Platform licensing, Azure Cost Management |
 | `consolidation_plan` | Duplicate clusters, which agent to keep, and a plan you can send to owners | derived from the sweep |
-| `agent_map` | A Mermaid diagram of the estate | derived from the sweep |
+| `agent_map` | A self-contained SVG diagram of the estate | derived from the sweep |
 
 The four agent stores it sweeps: **Copilot Studio**, **M365 Agent Builder**,
 **Azure AI Foundry**, **Microsoft Fabric**.

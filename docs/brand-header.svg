@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 180" width="1200" height="180" font-family="Inter, Segoe UI, Arial, sans-serif" role="img" aria-label="AgentLens - govern every AI agent in your Microsoft 365 tenant. By Elliot Margot.">
+  <defs>
+    <linearGradient id="emgrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F26F21"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F26F21"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="180" fill="#2A3B4E"/>
+  <rect x="0" y="174" width="1200" height="6" fill="url(#rule)"/>
+
+  <!-- Elliot Margot logo. Orange E, white M (navy M would vanish on this navy band). -->
+  <g transform="translate(44,40) scale(0.9)">
+    <path d="M15 15H30V85H15z M15 15H50V30H15z M15 42.5H45V57.5H15z M15 70H50V85H15z" fill="#F26F21"/>
+    <path d="M55 85V15L75 50L95 15V85" stroke="#FFFFFF" stroke-width="12"
+          stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <text x="160" y="80" fill="#FFFFFF" font-size="34" font-weight="700">AgentLens</text>
+  <text x="160" y="112" fill="#cbd5e1" font-size="16">Govern every AI agent in your Microsoft 365 tenant - read-only, and it never invents a number.</text>
+  <text x="160" y="140" fill="#FDBA74" font-size="13.5" font-weight="600">Copilot Studio &#183; Agent Builder &#183; Azure AI Foundry &#183; Microsoft Fabric</text>
+
+  <text x="1152" y="76" text-anchor="end" fill="#FFFFFF" font-size="15" font-weight="600">Elliot Margot</text>
+  <text x="1152" y="98" text-anchor="end" fill="#cbd5e1" font-size="13">Microsoft MVP &#183; M365 Copilot &amp; Copilot Studio</text>
+  <text x="1152" y="120" text-anchor="end" fill="#94a3b8" font-size="12.5">e-margot.ch</text>
+</svg>
