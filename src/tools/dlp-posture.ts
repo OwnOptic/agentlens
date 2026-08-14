@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { ok, partial, notConnected, failed, toMcpContent, type SourceReport, type ToolResult } from '../lib/result.js';
 import { readerConfigured } from '../lib/config.js';
 import { fetchTenantDlpPolicies, type DlpPolicy } from '../connectors/dlp.js';
+import { buildDlpCoverageSvg } from '../lib/diagram.js';
 import { listEnvironments } from '../connectors/inventory.js';
 import type { Environment } from '../domain/types.js';
 
@@ -48,6 +49,8 @@ export interface DlpPostureData {
   uncoveredEnvironments: number | null;
   policies: { name: string; scope: string; blocked: number; business: number; nonBusiness: number }[];
   environments: EnvironmentPosture[];
+  /** Coverage grid as self-contained SVG - present when environments were read. */
+  svg?: string;
   findings: { severity: 'critical' | 'warning' | 'info'; message: string }[];
 }
 
@@ -189,6 +192,7 @@ export async function dlpPosture(args: {
       nonBusiness: p.nonBusinessCount,
     })),
     environments,
+    ...(environments.length > 0 ? { svg: buildDlpCoverageSvg(environments) } : {}),
     findings,
   };
 
@@ -215,6 +219,9 @@ export const dlpPostureTool = {
     description:
       'Assess Data Loss Prevention coverage across Power Platform environments: which policies exist, which environments no policy covers, and whether the default environment is exposed. Read-only.',
     inputSchema: dlpPostureInput,
+    // Read-only, stated machine-readably: Cowork (and progressively Copilot)
+    // treats unannotated tools as destructive and demands confirmation.
+    annotations: { title: 'Assess DLP posture', readOnlyHint: true, destructiveHint: false },
   },
   handler: async (args: { environmentId?: string }) => toMcpContent(await dlpPosture(args)),
 };

@@ -15,7 +15,8 @@
     "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
     "package:agent": "node scripts/package-agent.mjs",
     "validate:agent": "node scripts/validate-agent-package.mjs",
-    "verify:consumption": "node scripts/verify-consumption-shape.mjs"
+    "verify:consumption": "node scripts/verify-consumption-shape.mjs",
+    "package:cowork": "node scripts/package-cowork.mjs"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

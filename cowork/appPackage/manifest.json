@@ -1,0 +1,47 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.28/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.28",
+  "version": "1.0.0",
+  "id": "${{COWORK_APP_ID}}",
+  "developer": {
+    "name": "Elliot Margot",
+    "websiteUrl": "https://e-margot.ch",
+    "privacyUrl": "https://e-margot.ch/privacy",
+    "termsOfUseUrl": "https://e-margot.ch/terms"
+  },
+  "name": {
+    "short": "AgentLens for Cowork",
+    "full": "AgentLens - AI agent governance for Copilot Cowork"
+  },
+  "description": {
+    "short": "Govern every AI agent in your tenant, from inside Cowork.",
+    "full": "AgentLens gives Copilot Cowork one live, read-only view of every AI agent in your tenant across Copilot Studio, Microsoft 365 Agent Builder, Azure AI Foundry and Microsoft Fabric. It surfaces Data Loss Prevention posture per environment, joins aggregate usage with real Azure spend, and drafts consolidation plans. All five tools are read-only; a source that cannot be read is reported as not connected, never as zero."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#2A3B4E",
+  "agentSkills": [
+    { "folder": "./skills/agent-governance-review" }
+  ],
+  "agentConnectors": [
+    {
+      "id": "agentlens-mcp",
+      "displayName": "AgentLens MCP server",
+      "description": "Read-only access to the tenant's agent estate: inventory across four stores, DLP posture, usage and cost, duplicate clusters, and the estate map.",
+      "toolSource": {
+        "remoteMcpServer": {
+          "mcpServerUrl": "${{AGENTLENS_MCP_URL}}",
+          "mcpToolDescription": {
+            "file": "./tools/agentlens-tools.json"
+          },
+          "authorization": {
+            "type": "OAuthPluginVault",
+            "referenceId": "${{MCP_AUTH_REFERENCE_ID}}"
+          }
+        }
+      }
+    }
+  ]
+}

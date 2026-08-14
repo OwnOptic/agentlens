@@ -15,6 +15,8 @@ import { getToken, clearAudienceCache, GRAPH_SCOPE } from '../lib/tokens.js';
 export interface Owner {
   name: string;
   email: string;
+  /** Present only when Graph returned it. false = the account is disabled. */
+  accountEnabled?: boolean;
 }
 
 interface GraphUser {
@@ -22,6 +24,7 @@ interface GraphUser {
   displayName?: string | null;
   mail?: string | null;
   userPrincipalName?: string | null;
+  accountEnabled?: boolean | null;
 }
 
 const FETCH_TIMEOUT_MS = 20_000;
@@ -78,7 +81,9 @@ export async function resolveOwners(ids: string[]): Promise<Map<string, Owner>> 
   for (const idChunk of chunk(unique, 200)) {
     try {
       const res = await graphPost(
-        'https://graph.microsoft.com/v1.0/directoryObjects/getByIds',
+        // $select on getByIds is supported and verified live; accountEnabled is
+        // not in the default property set, so it must be asked for explicitly.
+        'https://graph.microsoft.com/v1.0/directoryObjects/getByIds?$select=id,displayName,mail,userPrincipalName,accountEnabled',
         token,
         { ids: idChunk, types: ['user'] },
       );
@@ -88,7 +93,13 @@ export async function resolveOwners(ids: string[]): Promise<Map<string, Owner>> 
       for (const user of body.value) {
         const email = user.mail ?? user.userPrincipalName ?? '';
         if (user.id && email) {
-          result.set(user.id, { name: user.displayName ?? email, email });
+          result.set(user.id, {
+            name: user.displayName ?? email,
+            email,
+            ...(typeof user.accountEnabled === 'boolean'
+              ? { accountEnabled: user.accountEnabled }
+              : {}),
+          });
         }
       }
     } catch {

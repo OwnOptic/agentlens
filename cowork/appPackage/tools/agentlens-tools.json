@@ -1,0 +1,145 @@
+{
+  "tools": [
+    {
+      "name": "sweep_inventory",
+      "title": "Sweep every agent store",
+      "description": "List every AI agent in the tenant across Copilot Studio, M365 Agent Builder, Azure AI Foundry and Microsoft Fabric, with owners, locations, orphans and duplicate clusters. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "environmentId": {
+            "type": "string",
+            "description": "Optional. Restrict the sweep to a single Power Platform environment ID."
+          },
+          "includeOrphansOnly": {
+            "type": "boolean",
+            "description": "Optional. When true, return only agents with no resolvable owner."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Sweep every agent store",
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "dlp_posture",
+      "title": "Governance and DLP posture",
+      "description": "Assess Data Loss Prevention coverage across Power Platform environments: which policies exist, which environments no policy covers, and whether the default environment is exposed. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "environmentId": {
+            "type": "string",
+            "description": "Optional. Restrict the assessment to a single environment ID."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Assess DLP posture",
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "value_and_cost",
+      "title": "Value and cost",
+      "description": "Rank agents by real adoption and real per-agent message consumption, price that consumption at a stated rate, show what Azure actually invoiced, and give each agent a verdict: promote, improve, consolidate or retire. Highlights spend on agents nobody uses. Aggregate only, no conversation content. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90,
+            "description": "Lookback window in days for usage and consumption. Defaults to 30."
+          },
+          "environmentId": {
+            "type": "string",
+            "description": "Optional. Restrict to a single environment ID."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Value and cost per agent",
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "consolidation_plan",
+      "title": "Duplicates and consolidation plan",
+      "description": "Find duplicate agents, choose the canonical one to keep in each cluster, and draft the merge, retire and ownership actions as a brief that can be sent to agent owners, including what the retired agents actually consume. Read-only - it never merges or deletes anything.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "minClusterSize": {
+            "type": "integer",
+            "minimum": 2,
+            "description": "Minimum number of agents for a group to count as a duplicate cluster. Defaults to 2."
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90,
+            "description": "Lookback window in days for the consumption behind the saving. Defaults to 30."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Draft a consolidation plan",
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "agent_map",
+      "title": "Map my agents",
+      "description": "Render the agent estate as a diagram: the four stores with their counts, and the findings worth acting on such as orphaned agents and duplicate clusters. Stores that could not be read are labelled \"not connected\" rather than shown as zero. PRESENTATION: put the mermaid field inside a ```mermaid code fence so the chat renders it as a diagram - never redraw the map as ASCII art or plain text. Offer the svg field as a file for documents and exports. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "groupBy": {
+            "type": "string",
+            "enum": [
+              "store",
+              "environment"
+            ],
+            "description": "How to group the middle layer of the map. Defaults to 'store'."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Map my agents",
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}

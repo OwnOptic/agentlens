@@ -37,6 +37,7 @@ import { getAgentConsumption, getCapacity, type FeatureBreakdown } from '../conn
 import { buildEstate } from '../domain/estate.js';
 import { findDuplicateClusters } from '../domain/clusters.js';
 import { classify, type Verdict } from '../domain/verdicts.js';
+import { buildVerdictQuadrantSvg } from '../lib/diagram.js';
 import { resolveRates } from '../domain/rates.js';
 import {
   summarisePerAgent,
@@ -127,6 +128,8 @@ export interface ValueAndCostData {
   agentsWithConsumptionData: number;
   zeroUsageAgents: number;
   verdictCounts: Record<string, number>;
+  /** Verdict quadrant as self-contained SVG - present when any agent was classified. */
+  svg?: string;
   agents: AgentValueRow[];
 }
 
@@ -354,6 +357,7 @@ export async function valueAndCost(args: {
     agentsWithConsumptionData: rows.filter((r) => r.messages !== null).length,
     zeroUsageAgents: rows.filter((r) => r.sessions === 0).length,
     verdictCounts,
+    ...(Object.keys(verdictCounts).length > 0 ? { svg: buildVerdictQuadrantSvg(verdictCounts) } : {}),
     agents: rows.slice(0, MAX_ROWS),
   };
 
@@ -425,6 +429,9 @@ export const valueAndCostTool = {
     description:
       'Rank agents by real adoption and real per-agent message consumption, price that consumption at a stated rate, show what Azure actually invoiced, and give each agent a verdict: promote, improve, consolidate or retire. Highlights spend on agents nobody uses. Aggregate only, no conversation content. Read-only.',
     inputSchema: valueAndCostInput,
+    // Read-only, stated machine-readably: Cowork (and progressively Copilot)
+    // treats unannotated tools as destructive and demands confirmation.
+    annotations: { title: 'Value and cost per agent', readOnlyHint: true, destructiveHint: false },
   },
   handler: async (args: { days?: number; environmentId?: string }) =>
     toMcpContent(await valueAndCost(args)),

@@ -50,6 +50,10 @@ export interface AgentRow {
   store: string;
   location: string | null;
   owner: string | null;
+  /** Published | Draft, never published | Inactive - when the store exposes it. */
+  state: string | null;
+  /** True when the owner exists but the account is disabled in Entra. */
+  ownerDisabled?: boolean;
 }
 
 export interface SweepInventoryData {
@@ -59,8 +63,15 @@ export interface SweepInventoryData {
   /** Total across the stores that were read. */
   totalAgents: number;
   orphanCount: number;
+  /**
+   * Agents whose owner account is DISABLED in Entra. A stronger orphan signal
+   * than a missing owner: the person left, the agent kept running.
+   */
+  disabledOwnerCount: number;
   duplicateClusterCount: number;
   environmentCount: number | null;
+  /** Environments by type (Default/Sandbox/Production/...), null when unread. */
+  environmentsByType: Record<string, number> | null;
   stores: StoreReport[];
   agents: AgentRow[];
   agentRowsTruncated: boolean;
@@ -154,8 +165,15 @@ export async function sweepInventory(args: {
     storesTotal: stores.length,
     totalAgents: estate.agents.length,
     orphanCount: estate.orphans.length,
+    disabledOwnerCount: estate.disabledOwners.length,
     duplicateClusterCount: clusters.length,
     environmentCount: estate.environments ? estate.environments.length : null,
+    environmentsByType: estate.environments
+      ? estate.environments.reduce<Record<string, number>>((acc, e) => {
+          acc[e.type] = (acc[e.type] ?? 0) + 1;
+          return acc;
+        }, {})
+      : null,
     stores,
     agents: shown.slice(0, MAX_AGENT_ROWS).map((a) => ({
       id: a.id,
@@ -163,6 +181,8 @@ export async function sweepInventory(args: {
       store: PLATFORM_LABEL[a.platform],
       location: a.location,
       owner: a.owner,
+      state: a.state ?? null,
+      ...(a.ownerDisabled === true ? { ownerDisabled: true } : {}),
     })),
     agentRowsTruncated: shown.length > MAX_AGENT_ROWS,
   };
@@ -173,6 +193,9 @@ export async function sweepInventory(args: {
   const summary =
     `Read ${storesRead} of ${stores.length} agent stores${scope} and found ${data.totalAgents} agents: ` +
     `${data.orphanCount} with no resolvable owner and ${data.duplicateClusterCount} duplicate clusters.` +
+    (data.disabledOwnerCount > 0
+      ? ` ${data.disabledOwnerCount} agent(s) belong to a DISABLED owner account - a stronger orphan signal than a missing owner.`
+      : '') +
     (complete ? '' : ' The remaining stores could not be read, so the true total may be higher.');
 
   return complete
@@ -195,6 +218,9 @@ export const sweepInventoryTool = {
     description:
       'List every AI agent in the tenant across Copilot Studio, M365 Agent Builder, Azure AI Foundry and Microsoft Fabric, with owners, locations, orphans and duplicate clusters. Read-only.',
     inputSchema: sweepInventoryInput,
+    // Read-only, stated machine-readably: Cowork (and progressively Copilot)
+    // treats unannotated tools as destructive and demands confirmation.
+    annotations: { title: 'Sweep every agent store', readOnlyHint: true, destructiveHint: false },
   },
   handler: async (args: { environmentId?: string; includeOrphansOnly?: boolean }) =>
     toMcpContent(await sweepInventory(args)),

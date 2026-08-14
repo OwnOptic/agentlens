@@ -29,14 +29,21 @@ interface BapEnvironment {
   };
 }
 
+/*
+ * Field set verified against EntityDefinitions('bot') on a live environment
+ * (2026-08-14): statecode, statuscode, publishedon, createdon, modifiedon all
+ * exist; 'lastactivity' does NOT (selecting it returns HTTP 400), and a lookup
+ * must be selected as _ownerid_value, not 'ownerid'.
+ */
 interface DataverseBot {
   botid: string;
   name: string;
-  ownerid?: { id?: string; name?: string };
+  _ownerid_value?: string | null;
   statecode: number;
+  statuscode?: number;
+  publishedon?: string | null;
   createdon: string;
   modifiedon: string;
-  lastactivity?: string | null;
 }
 
 export type EnvironmentsResult =
@@ -68,14 +75,19 @@ function mapBot(env: Environment, bot: DataverseBot): Agent {
     id: bot.botid,
     name: bot.name,
     platform: 'copilot_studio',
-    owner: bot.ownerid?.name ?? null,
+    // The owner arrives as an Entra object id; the estate resolves it to a
+    // name via Graph, which also yields the disabled-account signal.
+    owner: bot._ownerid_value ?? null,
     location: env.name,
     envId: env.id,
     source: 'Dataverse',
-    state: bot.statecode === 0 ? 'Active' : 'Inactive',
+    // A draft that was never published and an inactive agent are different
+    // findings; neither may be summarised as the other.
+    state:
+      bot.statecode !== 0 ? 'Inactive' : bot.publishedon ? 'Published' : 'Draft, never published',
+    publishedOn: bot.publishedon ?? null,
     createdOn: bot.createdon,
     modifiedOn: bot.modifiedon,
-    lastActivity: bot.lastactivity ?? null,
   };
 }
 
@@ -129,7 +141,7 @@ export async function listAgentsInEnvironment(env: Environment): Promise<AgentsI
 
   const url =
     `${env.orgUrl.replace(/\/$/, '')}/api/data/v9.2/bots` +
-    '?$select=botid,name,ownerid,statecode,createdon,modifiedon,lastactivity';
+    '?$select=botid,name,_ownerid_value,statecode,statuscode,publishedon,createdon,modifiedon';
 
   try {
     const { rows } = await fetchODataAll<DataverseBot>(url, token);

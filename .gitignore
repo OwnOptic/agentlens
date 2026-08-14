@@ -40,3 +40,4 @@ npm-debug.log*
 
 # packaged declarative agent (built by scripts/package-agent.mjs)
 /agent/build
+cowork/build/

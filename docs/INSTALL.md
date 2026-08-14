@@ -184,10 +184,13 @@ curl -s -X POST "https://management.azure.com/providers/Microsoft.ResourceGraph/
 # BAD: an empty data array, or AccessDenied.
 ```
 
-**If you skip it - read this one.** Azure Resource Graph can return **zero rows
-and no error**. A tenant you are not allowed to see is indistinguishable on the
-wire from a tenant with no agents. This is the single most consequential step to
-miss.
+**If you skip it - read this one.** Microsoft documents that Azure Resource
+Graph can return **zero rows and no error** without this role - a tenant you
+are not allowed to see, indistinguishable from a tenant with no agents. Live
+testing (2026-08) observed an explicit `AccessDenied` instead at every
+privilege level tried, so current behaviour appears loud - but the verify
+above assumes nothing either way: a zero is only trusted when a sibling query
+returns rows on the same token.
 
 ### Step 5 - register the reader as a Power Platform admin management app
 
