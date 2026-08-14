@@ -35,9 +35,11 @@ unreadable-≠-zero guarantees called out: [docs/ARCHITECTURE.md](docs/ARCHITECT
 - [Package and sideload the agent](#package-and-sideload-the-agent)
 - [Access: what to grant, and what breaks without it](#access-what-to-grant-and-what-breaks-without-it)
 - [Securing the server](#securing-the-server)
+- [Cost analysis](#cost-analysis)
 - [Configuration](#configuration)
 - [Repo layout](#repo-layout)
 - [Troubleshooting](#troubleshooting)
+- [Handover](#handover)
 
 ---
 
@@ -444,6 +446,56 @@ AGENT_APP_ID="<guid>" AGENTLENS_MCP_URL="https://..." npm run package:agent
 
 ---
 
+## Cost analysis
+
+What a deployment actually costs, split the same way the product splits it:
+what stands, what scales, and what is a licence rather than infrastructure.
+These are published-rate figures, not your invoice: **verify against Azure Cost
+Management in your subscription** (the deployment itself can answer, via
+`value_and_cost`, once configured). Rates drift; this table's job is the shape,
+not the cents.
+
+### Standing infrastructure (monthly, whether or not anyone uses it)
+
+| Resource | Cost | Notes |
+|---|---|---|
+| Container Registry (Basic) | **~$5/month** | The only always-on charge. Created by `az containerapp up` to hold the image |
+| Container App, `minReplicas: 0` | **$0 idle** | Scale-to-zero; light usage sits inside the Container Apps free monthly grant |
+| Log Analytics workspace | ~$0 | Free up to the monthly ingestion allowance; a quiet server stays far under |
+| Key Vault (optional) | pennies | Billed per 10k operations; secret reads at this volume round to zero |
+| Entra apps, roles, consent, Dataverse users | $0 | Identity objects never bill |
+
+### Scales with use
+
+Sustained traffic beyond the Container Apps free grant bills per vCPU-second
+and GiB-second - for a governance tool queried by administrators, this
+realistically stays at zero. Image builds bill ACR task seconds (cents per
+deploy).
+
+### The real money is licences, not infrastructure
+
+| Licence | Needed for | Without it |
+|---|---|---|
+| **Microsoft 365 Copilot** (per user) | Running the agent at all | The agent uploads but never answers |
+| Agent 365 | The M365 Agent Builder store in the sweep | That one store reports `not_connected`; the rest work |
+
+### What the product itself says about cost
+
+`value_and_cost` reports two figures and never adds them: **billed** (what
+Azure invoiced, from Cost Management) and **consumption** (per-agent metered
+messages, priced at a stated rate from `src/domain/rates.ts` - the only place
+a price may exist in this codebase). Agents on prepaid capacity are reported
+as **unmeasured, not free**. A gap between the two figures is informative, not
+a bug.
+
+### Tearing it down
+
+Deleting the resource group removes every billing object. The Entra app
+registrations survive (they cost nothing) and must be deleted separately if
+the tenant is being cleaned completely.
+
+---
+
 ## Configuration
 
 Every variable is optional in the sense that the server always starts — what is
@@ -477,7 +529,7 @@ src/
 agent/              the Copilot declarative agent package
 infra/              bicep: registry, Container Apps env, scale-to-zero app
 scripts/            package the agent, provision the app registrations
-docs/               architecture, deployment, app registrations
+docs/               install, maintaining, troubleshooting, architecture, deployment
 ```
 
 Development: `npm run dev` (watch), `npm run type-check`, `npm run build`,
@@ -497,6 +549,38 @@ Development: `npm run dev` (watch), `npm run type-check`, `npm run build`,
 | M365 store says "requires a Microsoft Agent 365 licence" | Expected without Agent 365. The other stores still report |
 | Copilot cannot reach the server | The URL must be public **https** and end in `/mcp`. Check `/health` first |
 | Sign-in loop after enabling SSO | Audience mismatch. `MCP_AUDIENCE` must equal the auth config's Application ID URI, and that URI must be in the app's `identifierUris` |
+
+Every error a real install has hit, with its fix:
+[docs/INSTALL-TROUBLESHOOTING.md](docs/INSTALL-TROUBLESHOOTING.md).
+
+---
+
+## Handover
+
+Everything an administrator inheriting a deployment needs, in reading order:
+
+1. **[docs/INSTALL.md](docs/INSTALL.md)** - the 12 steps, of which only **two**
+   need a signed-in human (the Entra SSO auth config and the zip upload).
+   Phase 0 lists every prerequisite, licence and tenant switch up front.
+2. **[docs/MAINTAINING.md](docs/MAINTAINING.md)** - day-two operations: the
+   `/health` decision tree, secret rotation, how gates silently regress, and
+   the rules for extending the server. Ends with a **per-tenant handover
+   sheet** - fill it in at install time and keep it with the deployment.
+3. **[docs/INSTALL-TROUBLESHOOTING.md](docs/INSTALL-TROUBLESHOOTING.md)** -
+   every error a real install has produced, with the fix.
+4. **[docs/install-process.svg](docs/install-process.svg)** - the whole
+   install at a glance: what is scripted, where the two gates are, and the
+   check that proves each step landed.
+
+Three things to do at handover, not after:
+
+- **Calendar the reader secret's expiry** (two years from creation). Nothing
+  warns you; when it lapses, every source goes `not_connected` at once.
+- **Record the `AGENT_APP_ID`.** It must never change - a new GUID creates a
+  second app in the tenant instead of updating the first.
+- **Confirm who owns the two gates** (a Global Administrator for the auth
+  config, a Teams admin for upload rights) - they are the only scheduled
+  human dependencies in a redeploy.
 
 Enable developer mode in Copilot to see tool calls and auth errors in the debug
 card.
