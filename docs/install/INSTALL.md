@@ -7,7 +7,7 @@ step.
 Three ways to use this:
 
 - **Let Claude drive it.** Open the repo with Claude Code and say *"install
-  AgentLens and guide me."* It follows [CLAUDE.md](../CLAUDE.md), runs the
+  AgentLens and guide me."* It follows [CLAUDE.md](../../CLAUDE.md), runs the
   scriptable steps, and stops at each of the **two** gates with the click-path.
 - **Run the script.** `./scripts/install.ps1 -TenantId <guid> -DryRun` first,
   then without `-DryRun`. Same sequence, same gates.
@@ -148,7 +148,7 @@ az role assignment create --assignee-object-id "$SP" --assignee-principal-type S
 
 **If you skip it.** No Resource Graph access at all, and billed spend reports
 `not_connected`. (If `az role assignment` itself errors with `MissingSubscription`
-on your machine, see [INSTALL-TROUBLESHOOTING.md](INSTALL-TROUBLESHOOTING.md) -
+on your machine, see [INSTALL-TROUBLESHOOTING.md](TROUBLESHOOTING.md) -
 the assignment can be made as a raw ARM PUT.)
 
 ---
@@ -269,7 +269,7 @@ az containerapp up --name agentlens-mcp --resource-group <rg> --location <region
 ```
 
 Builds in Azure - no local Docker. For repeatable multi-tenant deployments,
-`infra/` has the same thing as bicep ([DEPLOY.md](DEPLOY.md)).
+`infra/` has the same thing as bicep ([DEPLOY.md](../operate/DEPLOY.md)).
 
 **Verify now.** Read the FQDN back from Azure rather than assuming:
 
@@ -281,7 +281,7 @@ curl https://<fqdn>/health     # {"status":"ok","authEnabled":false,"readerConfi
 
 On Windows, `az containerapp up` and `az acr build` can crash with a
 `UnicodeEncodeError` while **the build continues server-side** - see
-[INSTALL-TROUBLESHOOTING.md](INSTALL-TROUBLESHOOTING.md).
+[INSTALL-TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 **If you skip it.** The agent installs, shows its five starters, and fails every
 question - its action points at nothing.
@@ -359,7 +359,7 @@ curl -s -o /dev/null -w "%{http_code}" -X POST https://<fqdn>/mcp ...   # no tok
 With `requestedAccessTokenVersion: 2` the token's `aud` is the app id GUID and
 the server accepts both GUID and `api://` forms; the portal's own URI has the
 form `api://auth-<guid>/<client-id>`, which is a third form - see
-[INSTALL-TROUBLESHOOTING.md](INSTALL-TROUBLESHOOTING.md).
+[INSTALL-TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ### Step 11 - package the agent zip
 
@@ -415,6 +415,6 @@ None of these produce a wrong number. Each produces a `not_connected` source
 with the fix attached - which is the whole design, and still worse than having
 the data.
 
-See also: [INSTALL-TROUBLESHOOTING.md](INSTALL-TROUBLESHOOTING.md) for every
-error a real install has hit, and [MAINTAINING.md](MAINTAINING.md) for
+See also: [INSTALL-TROUBLESHOOTING.md](TROUBLESHOOTING.md) for every
+error a real install has hit, and [MAINTAINING.md](../operate/MAINTAINING.md) for
 everything after day one.

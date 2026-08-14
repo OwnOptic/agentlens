@@ -1,6 +1,6 @@
 # Deployment runbook
 
-The short version is in the [README](../README.md#deploy-it): `azd up`, then
+The short version is in the [README](../../README.md#deploy-it): `azd up`, then
 package the agent with the URL it prints. This is the long version, in the order
 an administrator actually hits the walls.
 
@@ -209,7 +209,7 @@ Until this step the server accepts any caller who knows the URL.
 Then create the Entra SSO auth config (Agents Toolkit or the Teams developer
 portal), re-run the script with `-SsoApplicationIdUri`, set `MCP_TENANT_ID` and
 `MCP_AUDIENCE` on the Container App, and repackage the agent with
-`MCP_AUTH_REFERENCE_ID`. Detail: [agent/README.md](../agent/README.md#authentication).
+`MCP_AUTH_REFERENCE_ID`. Detail: [agent/README.md](../../agent/README.md#authentication).
 
 Confirm `/health` now reports `authEnabled: true`.
 

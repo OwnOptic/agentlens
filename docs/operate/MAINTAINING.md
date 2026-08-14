@@ -1,6 +1,6 @@
 # Maintaining AgentLens
 
-For whoever inherits a running deployment. [INSTALL.md](INSTALL.md) covers day
+For whoever inherits a running deployment. [INSTALL.md](../install/INSTALL.md) covers day
 one; this covers every day after: updating it, diagnosing it, extending it, and
 handing it over.
 

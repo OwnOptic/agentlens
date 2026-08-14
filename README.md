@@ -1,11 +1,11 @@
-![AgentLens - govern every AI agent in your Microsoft 365 tenant. By Elliot Margot, Microsoft MVP.](docs/brand-header.svg)
+![AgentLens - govern every AI agent in your Microsoft 365 tenant. By Elliot Margot, Microsoft MVP.](docs/assets/brand-header.svg)
 
 # AgentLens
 
 [![CI](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml/badge.svg)](https://github.com/OwnOptic/agentlens/actions/workflows/ci.yml)
 [![Licence: source-available](https://img.shields.io/badge/licence-source--available-2A3B4E)](LICENSE.md)
-[![Surface: Microsoft 365 Copilot](https://img.shields.io/badge/surface-Microsoft%20365%20Copilot-F26F21)](docs/INSTALL.md)
-[![Posture: read-only](https://img.shields.io/badge/tenant%20access-read--only-2f855a)](docs/APP-REGISTRATIONS.md)
+[![Surface: Microsoft 365 Copilot](https://img.shields.io/badge/surface-Microsoft%20365%20Copilot-F26F21)](docs/install/INSTALL.md)
+[![Posture: read-only](https://img.shields.io/badge/tenant%20access-read--only-2f855a)](docs/architecture/APP-REGISTRATIONS.md)
 
 A Microsoft 365 Copilot agent that audits the AI agents in your tenant.
 
@@ -25,11 +25,11 @@ you  ->  AgentLens declarative agent   (agent/)     what you talk to in Copilot
 Two pieces, one repo. The agent package is the conversational surface; the MCP
 server is everything behind it.
 
-![Architecture: the declarative agent calls the MCP server over Entra SSO; the server reads five upstream APIs through one read-only service principal. Sources that cannot be read are reported as not connected, never as zero.](docs/diagrams/architecture.svg)
+![Architecture: the declarative agent calls the MCP server over Entra SSO; the server reads five upstream APIs through one read-only service principal. Sources that cannot be read are reported as not connected, never as zero.](docs/assets/diagrams/architecture.svg)
 
 The full walkthrough of this diagram, with the read-only and
 unreadable-is-not-zero guarantees called out:
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#the-shape-of-it).
+[docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md#the-shape-of-it).
 
 ---
 
@@ -39,7 +39,7 @@ unreadable-is-not-zero guarantees called out:
 - [The one rule](#the-one-rule)
 - [Run it locally in five minutes](#run-it-locally-in-five-minutes)
 - [Deploy it](#deploy-it) - [the whole install, in order](#the-whole-install-in-order)
-  · step-by-step reference: [docs/INSTALL.md](docs/INSTALL.md)
+  · step-by-step reference: [docs/install/INSTALL.md](docs/install/INSTALL.md)
 - [Package and sideload the agent](#package-and-sideload-the-agent)
 - [Copilot Cowork plugin](#copilot-cowork-plugin)
 - [Access: what to grant, and what breaks without it](#access-what-to-grant-and-what-breaks-without-it)
@@ -104,7 +104,7 @@ Two consequences you might otherwise read as missing features:
 
 ### Two kinds of cost, kept apart
 
-![Two cost figures in value_and_cost, never summed: metered messages priced by src/domain/rates.ts produce a derived per-agent cost, and Azure Cost Management produces the real invoiced total at scope level.](docs/diagrams/cost-model.svg)
+![Two cost figures in value_and_cost, never summed: metered messages priced by src/domain/rates.ts produce a derived per-agent cost, and Azure Cost Management produces the real invoiced total at scope level.](docs/assets/diagrams/cost-model.svg)
 
 `value_and_cost` reports both, and never adds them together:
 
@@ -220,7 +220,7 @@ things - the Entra SSO auth config and the upload; it does the rest.
 The whole flow at a glance - what is scripted, where the two gates are, and
 the check that proves each step landed:
 
-![The AgentLens install: 12 steps in four phases - identity, tenant access, deploy, agent - of which only two need a signed-in human. Every step carries the check that proves it worked.](docs/install-process.svg)
+![The AgentLens install: 12 steps in four phases - identity, tenant access, deploy, agent - of which only two need a signed-in human. Every step carries the check that proves it worked.](docs/install/install-process.svg)
 
 **Or run the installer yourself:**
 
@@ -234,7 +234,7 @@ and it picks up where it stopped.
 
 **Or by hand.** Every step is documented individually - what it does, the exact
 command, how to verify it, and what breaks without it - in
-[docs/INSTALL.md](docs/INSTALL.md). Summary:
+[docs/install/INSTALL.md](docs/install/INSTALL.md). Summary:
 
 Steps marked **manual** cannot be scripted - Microsoft requires a signed-in human
 for them.
@@ -327,7 +327,7 @@ things a week. The first call after idle pays a few seconds of cold start.
 The *app* is free at idle; the deployment is not. The container registry bills a
 few dollars a month whether or not you pull from it, and Log Analytics is free
 only up to its ingestion allowance - which a quiet server stays well under. See
-[the cost note](docs/INSTALL.md#cost-honestly).
+[the cost note](docs/install/INSTALL.md#cost-honestly).
 
 <details>
 <summary>Repeatable across client tenants: <code>azd up</code></summary>
@@ -411,7 +411,7 @@ COWORK_APP_ID=<stable-guid> AGENTLENS_MCP_URL=https://<fqdn>/mcp MCP_AUTH_REFERE
 ```
 
 Build, upload paths and the rules that keep it honest:
-[docs/COWORK.md](docs/COWORK.md).
+[docs/surfaces/COWORK.md](docs/surfaces/COWORK.md).
 
 ---
 
@@ -565,7 +565,12 @@ agent/              the Copilot declarative agent package
 cowork/             the Copilot Cowork plugin package (same server, same auth)
 infra/              bicep: registry, Container Apps env, scale-to-zero app
 scripts/            package the agent, provision the app registrations
-docs/               install, maintaining, troubleshooting, architecture, deployment
+docs/
+  install/          the 12 steps, troubleshooting, the install-at-a-glance diagram
+  operate/          day-two operations, repeatable deployment
+  architecture/     how it is built, the two identities
+  surfaces/         the Copilot Cowork plugin
+  assets/           brand header, hand-authored diagrams
 ```
 
 Development: `npm run dev` (watch), `npm run type-check`, `npm run build`,
@@ -587,7 +592,7 @@ Development: `npm run dev` (watch), `npm run type-check`, `npm run build`,
 | Sign-in loop after enabling SSO | Audience mismatch. `MCP_AUDIENCE` must equal the auth config's Application ID URI, and that URI must be in the app's `identifierUris` |
 
 Every error a real install has hit, with its fix:
-[docs/INSTALL-TROUBLESHOOTING.md](docs/INSTALL-TROUBLESHOOTING.md).
+[docs/install/TROUBLESHOOTING.md](docs/install/TROUBLESHOOTING.md).
 
 ---
 
@@ -597,21 +602,21 @@ Everything in `docs/`, by the question it answers:
 
 | You want to know | Read |
 |---|---|
-| How do I install it, step by step, with proof each step worked? | [docs/INSTALL.md](docs/INSTALL.md) |
-| What went wrong, and what is the fix? | [docs/INSTALL-TROUBLESHOOTING.md](docs/INSTALL-TROUBLESHOOTING.md) |
-| How do I run it after day one - update, rotate secrets, extend it? | [docs/MAINTAINING.md](docs/MAINTAINING.md) |
-| How is it built, and what guarantees does it make? | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| How do I deploy it repeatably across tenants? | [docs/DEPLOY.md](docs/DEPLOY.md) |
-| How do I put the same tools inside Copilot Cowork? | [docs/COWORK.md](docs/COWORK.md) |
-| What exactly can each identity do, and why two of them? | [docs/APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md) |
+| How do I install it, step by step, with proof each step worked? | [docs/install/INSTALL.md](docs/install/INSTALL.md) |
+| What went wrong, and what is the fix? | [docs/install/TROUBLESHOOTING.md](docs/install/TROUBLESHOOTING.md) |
+| How do I run it after day one - update, rotate secrets, extend it? | [docs/operate/MAINTAINING.md](docs/operate/MAINTAINING.md) |
+| How is it built, and what guarantees does it make? | [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) |
+| How do I deploy it repeatably across tenants? | [docs/operate/DEPLOY.md](docs/operate/DEPLOY.md) |
+| How do I put the same tools inside Copilot Cowork? | [docs/surfaces/COWORK.md](docs/surfaces/COWORK.md) |
+| What exactly can each identity do, and why two of them? | [docs/architecture/APP-REGISTRATIONS.md](docs/architecture/APP-REGISTRATIONS.md) |
 | What are the rules for changing the code? | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | How does an AI assistant drive this repo? | [CLAUDE.md](CLAUDE.md) |
 | Under what terms did I receive this? | [LICENSE.md](LICENSE.md) |
 
 Diagrams, all hand-authored SVG:
-[architecture](docs/diagrams/architecture.svg) ·
-[the install at a glance](docs/install-process.svg) ·
-[the two cost figures, never summed](docs/diagrams/cost-model.svg)
+[architecture](docs/assets/diagrams/architecture.svg) ·
+[the install at a glance](docs/install/install-process.svg) ·
+[the two cost figures, never summed](docs/assets/diagrams/cost-model.svg)
 
 ---
 
@@ -619,16 +624,16 @@ Diagrams, all hand-authored SVG:
 
 Everything an administrator inheriting a deployment needs, in reading order:
 
-1. **[docs/INSTALL.md](docs/INSTALL.md)** - the 12 steps, of which only **two**
+1. **[docs/install/INSTALL.md](docs/install/INSTALL.md)** - the 12 steps, of which only **two**
    need a signed-in human (the Entra SSO auth config and the zip upload).
    Phase 0 lists every prerequisite, licence and tenant switch up front.
-2. **[docs/MAINTAINING.md](docs/MAINTAINING.md)** - day-two operations: the
+2. **[docs/operate/MAINTAINING.md](docs/operate/MAINTAINING.md)** - day-two operations: the
    `/health` decision tree, secret rotation, how gates silently regress, and
    the rules for extending the server. Ends with a **per-tenant handover
    sheet** - fill it in at install time and keep it with the deployment.
-3. **[docs/INSTALL-TROUBLESHOOTING.md](docs/INSTALL-TROUBLESHOOTING.md)** -
+3. **[docs/install/TROUBLESHOOTING.md](docs/install/TROUBLESHOOTING.md)** -
    every error a real install has produced, with the fix.
-4. **[docs/install-process.svg](docs/install-process.svg)** - the whole
+4. **[docs/install/install-process.svg](docs/install/install-process.svg)** - the whole
    install at a glance: what is scripted, where the two gates are, and the
    check that proves each step landed.
 
