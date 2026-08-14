@@ -38,7 +38,7 @@ Two identities, deliberately separate:
   nothing else in the system does.
 
 The server itself holds no permissions. Compromising it gains an attacker
-whatever the reader can read — which is read-only, and audited by Entra.
+whatever the reader can read - which is read-only, and audited by Entra.
 
 ## Layers
 
@@ -97,7 +97,7 @@ it read and what it could not. The agent's instructions require it to relay a
 *"Which agents actually deliver value, and what do they cost?"* →
 `value_and_cost`:
 
-1. **Sweep** the estate (`buildEstate`) — four stores, environment list, owner
+1. **Sweep** the estate (`buildEstate`) - four stores, environment list, owner
    resolution.
 2. **Read usage** from Dataverse `msdyn_conversationkpis`, per configured
    environment, aggregated by agent and day. Per-environment failures are
@@ -111,7 +111,7 @@ it read and what it could not. The agent's instructions require it to relay a
    the premium meter is not charged at the standard rate. The rate and its
    source are attached to the result.
 6. **Cluster** duplicates by normalised name stem.
-7. **Classify** each agent — promote / improve / consolidate / retire — from
+7. **Classify** each agent - promote / improve / consolidate / retire - from
    sessions, escalation rate and duplicate status. An agent with no readable
    usage gets `null` and a rationale saying so.
 8. **Report**: `ok` if every side was read, `partial` otherwise, never a blend.
@@ -128,7 +128,7 @@ makes the gap itself worth reading.
 
 Per-agent consumption is addressed by pay-as-you-go billing policy, so agents in
 environments on prepaid capacity packs are absent from it. They are reported as
-unmeasured rather than as costing nothing — the same zero-versus-unknown rule
+unmeasured rather than as costing nothing - the same zero-versus-unknown rule
 that governs the sweep.
 
 `src/domain/rates.ts` is the only place a price exists in this codebase. That is
