@@ -20,7 +20,7 @@ Concretely, in any code you add:
   source and why. Never substitute an estimate, an average, a sample or a
   placeholder.
 - Zero is a real answer. Unknown is a different real answer. Never render one as
-  the other — this is the single most common way to get it wrong, and it usually
+  the other - this is the single most common way to get it wrong, and it usually
   looks like a harmless `?? 0`.
 - Do not fill a gap to make output look complete. Incomplete and honest beats
   complete and wrong, every time.
@@ -39,7 +39,7 @@ src/tools/*            compose connectors into an answer, and report every sourc
 ```
 
 A new tool goes in `src/tools/`, is added to the `TOOLS` array in
-`src/index.ts`, and needs no agent repackaging — Copilot discovers tools at
+`src/index.ts`, and needs no agent repackaging - Copilot discovers tools at
 runtime.
 
 Every tool must:
@@ -48,7 +48,7 @@ Every tool must:
 - Keep a `notConnected` branch for missing credentials or permissions. It is not
   scaffolding to delete; it is the runtime behaviour in a real tenant.
 - Carry a `remediation` that names the actual next step, not a generic hint.
-- Cap large responses. Copilot has a response size limit — summarise and report
+- Cap large responses. Copilot has a response size limit - summarise and report
   the truncation rather than silently dropping rows.
 
 ## What not to add
@@ -139,7 +139,7 @@ in Copilot, not only through Inspector.
 ## Things that will bite you
 
 - **`az ad app update` cannot set the nested `api{}` object.** PATCH Microsoft
-  Graph instead — already handled in `scripts/provision-agent-mcp-app.ps1`.
+  Graph instead - already handled in `scripts/provision-agent-mcp-app.ps1`.
 - **Power Platform DLP access is not an API permission.** The SP must be
   registered with `New-PowerAppManagementApp`, by an administrator, in a user
   context. A service principal cannot register itself.

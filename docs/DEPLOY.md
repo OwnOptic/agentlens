@@ -19,7 +19,7 @@ consent), **Power Platform Administrator** (to grant the directory role and to
 run `New-PowerAppManagementApp`), and **Owner or User Access Administrator** on
 the subscription (to assign Cost Management Reader).
 
-## Step 1 — the reader app registration
+## Step 1 - the reader app registration
 
 ```powershell
 ./scripts/provision-reader-app.ps1 -TenantId <guid>
@@ -37,10 +37,10 @@ Optionally store the secret in Key Vault instead of the output:
 Then set `KEY_VAULT_URI` and give the Container App's managed identity the
 **Key Vault Secrets User** role.
 
-## Step 2 — the grants that cannot be scripted
+## Step 2 - the grants that cannot be scripted
 
 Do these now. Each one you skip becomes a `not_connected` source later, with the
-fix attached — the agent will tell you, but it is faster to do them up front.
+fix attached - the agent will tell you, but it is faster to do them up front.
 
 **2a. Power Platform Administrator directory role** → AgentLens-Reader.
 [Entra roles](https://entra.microsoft.com/#view/Microsoft_AAD_IAM/RolesManagementMenuBlade/~/AllRoles)
@@ -56,7 +56,7 @@ first.
 AgentLens-Reader. Without it `value_and_cost` returns usage and marks cost not
 connected.
 
-**2d. Power Platform admin management application.** In a *user* context — a
+**2d. Power Platform admin management application.** In a *user* context - a
 service principal cannot register itself:
 
 ```powershell
@@ -65,7 +65,7 @@ Add-PowerAppsAccount
 New-PowerAppManagementApp -ApplicationId <reader-app-id>
 ```
 
-Without it `dlp_posture` gets a 403, which it reports as a 403 — never as
+Without it `dlp_posture` gets a 403, which it reports as a 403 - never as
 "no policies exist".
 
 **2e. Note the pay-as-you-go billing policy ID.** Power Platform admin center
@@ -96,7 +96,7 @@ app user → AgentLens-Reader → assign a read role. List those org URLs in
 licensed for Agent 365. Without it the M365 registry store reports not connected
 and the rest of the sweep still returns.
 
-## Step 3 — deploy the MCP server
+## Step 3 - deploy the MCP server
 
 The declarative agent has no code in it. This is the endpoint its action points
 at, and where all five tools run.
@@ -167,7 +167,7 @@ What it provisions, all in one resource group:
 | User-assigned identity | AcrPull on the registry, so no admin credentials |
 
 Both paths produce the same running server. CI compiles the bicep on every push,
-so a template error surfaces before you run it — but neither path has been run
+so a template error surfaces before you run it - but neither path has been run
 against a live subscription yet, so treat the first deployment as the real test.
 
 Scale-to-zero is the point: the app costs nothing while idle, and a governance
@@ -184,7 +184,7 @@ curl https://<app>.azurecontainerapps.io/health
 `readerConfigured: true` means the credentials arrived. `authEnabled: false` is
 expected until step 5.
 
-## Step 4 — package and sideload the agent
+## Step 4 - package and sideload the agent
 
 ```bash
 export AGENT_APP_ID="<stable-guid>"       # generate once, never regenerate
@@ -198,7 +198,7 @@ Upload `agent/build/agentlens-agent.zip` at
 Ask a conversation starter and check the numbers against the Power Platform
 admin center.
 
-## Step 5 — secure the endpoint
+## Step 5 - secure the endpoint
 
 Until this step the server accepts any caller who knows the URL.
 

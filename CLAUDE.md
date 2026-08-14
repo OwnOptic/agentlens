@@ -1,7 +1,7 @@
 # Working in this repo
 
 Read [README.md](README.md) for what AgentLens is, and
-[CONTRIBUTING.md](CONTRIBUTING.md) before changing any code — especially the
+[CONTRIBUTING.md](CONTRIBUTING.md) before changing any code - especially the
 honesty contract, which is the reason most of this codebase looks the way it
 does.
 
@@ -20,13 +20,13 @@ breaks without it. Read it before starting.
 ### How to run the install
 
 1. **Check the ground first.** `az --version`, `az account show`, `node -v`. If
-   `az` is missing or signed into the wrong tenant, say so and stop — do not
+   `az` is missing or signed into the wrong tenant, say so and stop - do not
    guess a tenant.
 2. **Dry run, and show it.** `./scripts/install.ps1 -TenantId <t> -DryRun`
    prints every command it would run and every gate it would stop at. Show the
    user what is about to happen to their tenant before it happens.
 3. **Run it for real**, or run the equivalent `az` commands yourself if
-   PowerShell is unavailable — `docs/INSTALL.md` lists the exact command for
+   PowerShell is unavailable - `docs/INSTALL.md` lists the exact command for
    every step, so you are never improvising against someone's tenant.
 4. **At each gate, stop.** Give the user the exact click-path or command, wait,
    then verify the gate actually cleared before continuing. Do not carry on
@@ -82,7 +82,7 @@ AGENTLENS_MCP_URL=https://<fqdn>/mcp \
   gives a generic error with no line number; this names the broken field first.
 - Hand the user `agent/build/agentlens-agent.zip` and the upload click-path.
 
-If the MCP URL changes later, the zip must be rebuilt and re-uploaded — the URL
+If the MCP URL changes later, the zip must be rebuilt and re-uploaded - the URL
 is baked in. Changing an MCP *tool* does not require this, because the agent
 discovers tools at runtime.
 
@@ -93,7 +93,7 @@ The same rule the product follows applies to how you report the install:
 - Verify each step landed rather than assuming the command succeeded. `/health`
   is the single best check: `authEnabled` and `readerConfigured` are facts.
 - If a step failed or a gate is still open, say so plainly and say what it costs
-  — each open gate maps to a specific source the agent will report as
+ - each open gate maps to a specific source the agent will report as
   `not_connected`.
 - Never tell the user the install is complete while a gate is open. Say which
   tools will work and which will not.

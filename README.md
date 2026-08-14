@@ -30,7 +30,7 @@ unreadable-≠-zero guarantees called out: [docs/ARCHITECTURE.md](docs/ARCHITECT
 - [What it answers](#what-it-answers)
 - [The one rule](#the-one-rule)
 - [Run it locally in five minutes](#run-it-locally-in-five-minutes)
-- [Deploy it](#deploy-it) — [the whole install, in order](#the-whole-install-in-order)
+- [Deploy it](#deploy-it) - [the whole install, in order](#the-whole-install-in-order)
   · step-by-step reference: [docs/INSTALL.md](docs/INSTALL.md)
 - [Package and sideload the agent](#package-and-sideload-the-agent)
 - [Access: what to grant, and what breaks without it](#access-what-to-grant-and-what-breaks-without-it)
@@ -58,8 +58,8 @@ Five tools, all read-only.
 The four agent stores it sweeps: **Copilot Studio**, **M365 Agent Builder**,
 **Azure AI Foundry**, **Microsoft Fabric**.
 
-`value_and_cost` gives each agent one of four verdicts — promote, improve,
-consolidate, retire — derived from real session counts, real escalation rates,
+`value_and_cost` gives each agent one of four verdicts - promote, improve,
+consolidate, retire - derived from real session counts, real escalation rates,
 and whether the agent duplicates another. An agent whose usage could not be read
 gets no verdict, and says so.
 
@@ -73,7 +73,7 @@ An administrator makes retire-or-keep decisions from this output, and a security
 reviewer will ask what it can change. Both collapse if a single number is
 invented. So:
 
-- Every figure comes from an API response in the same call — or is derived from
+- Every figure comes from an API response in the same call - or is derived from
   one by arithmetic whose inputs and method ship alongside it.
 - A source that cannot be read returns `not_connected` or `partial`, naming the
   source, the reason, and the fix.
@@ -88,7 +88,7 @@ Two consequences you might otherwise read as missing features:
   not connected. That is the honest answer, and it is the first thing worth
   testing.
 - **A figure is never separated from how it was produced.** Where a number is
-  derived rather than read — per-agent cost, month-end projections — the inputs
+  derived rather than read - per-agent cost, month-end projections - the inputs
   and the method travel with it in the same payload. See below.
 
 ### Two kinds of cost, kept apart
@@ -100,7 +100,7 @@ Two consequences you might otherwise read as missing features:
 | | Where it comes from | What it is |
 |---|---|---|
 | **Billed** | Azure Cost Management | What Azure actually invoiced, at subscription or billing scope. A fact about your bill |
-| **Consumption** | Power Platform licensing API | Messages and billed sessions **per agent** — the data behind the Copilot Studio pages in the admin center. Priced at a stated rate to give a per-agent cost |
+| **Consumption** | Power Platform licensing API | Messages and billed sessions **per agent** - the data behind the Copilot Studio pages in the admin center. Priced at a stated rate to give a per-agent cost |
 
 The rate is the only price in the codebase, and it is always visible. Set
 `COPILOT_RATE_STANDARD` / `COPILOT_RATE_PREMIUM` from your own price sheet and
@@ -109,14 +109,14 @@ price is used, labelled as such with the date it was last checked. Either way
 the rate and its source ship inside the result, so the multiplier can be
 inspected and disagreed with.
 
-A gap between the two is informative rather than a bug — it usually means
+A gap between the two is informative rather than a bug - it usually means
 prepaid capacity is absorbing consumption that never reaches an invoice.
 
 Per-agent consumption needs `PPAC_BILLING_POLICY_ID`, and it covers
 pay-as-you-go environments only. Agents on prepaid capacity packs are reported
 as **unmeasured, not free**.
 
-That endpoint is undocumented — it backs the admin center UI — so check it
+That endpoint is undocumented - it backs the admin center UI - so check it
 against your tenant before trusting a cost figure:
 
 ```bash
@@ -131,7 +131,7 @@ lists the ones it can see.
 
 ## Run it locally in five minutes
 
-No Azure access needed for this part — you are checking the server runs and the
+No Azure access needed for this part - you are checking the server runs and the
 tools refuse to invent anything.
 
 ```bash
@@ -174,7 +174,7 @@ the same call returns your tenant.
 
 ### What actually needs deploying, and why
 
-The agent package is five files — two manifests, a plugin descriptor and two
+The agent package is five files - two manifests, a plugin descriptor and two
 icons. **It contains no code.** Inside `ai-plugin.json`:
 
 ```json
@@ -184,19 +184,19 @@ icons. **It contains no code.** Inside `ai-plugin.json`:
 
 Copilot calls that URL live, every time someone asks a question. The MCP server
 is where the five tools run, and the only place that can hold the reader
-credentials and call Azure Resource Graph, Graph, Dataverse and Cost Management —
+credentials and call Azure Resource Graph, Graph, Dataverse and Cost Management - 
 a declarative agent has instructions and actions, not code, and cannot do a
 client-credentials token flow itself.
 
 So there are exactly three things to stand up:
 
-1. **Two app registrations** — `AgentLens-Reader` (does the reading) and
+1. **Two app registrations** - `AgentLens-Reader` (does the reading) and
    `AgentLens-MCP` (guards the endpoint).
 2. **The MCP server**, on a public https endpoint. Below.
 3. **The zip**, sideloaded into Copilot. [Next section](#package-and-sideload-the-agent).
 
 Without step 2 the agent installs cleanly, shows its five starters, and fails
-every question — the action points at nothing.
+every question - the action points at nothing.
 
 ### The whole install, in order
 
@@ -213,25 +213,25 @@ things; it does the rest.
 ```
 
 `-DryRun` prints every command and every gate without changing anything. Drop it
-to run for real. It is idempotent and resumable — re-run after clearing a gate
+to run for real. It is idempotent and resumable - re-run after clearing a gate
 and it picks up where it stopped.
 
-**Or by hand.** Every step is documented individually — what it does, the exact
-command, how to verify it, and what breaks without it — in
+**Or by hand.** Every step is documented individually - what it does, the exact
+command, how to verify it, and what breaks without it - in
 [docs/INSTALL.md](docs/INSTALL.md). Summary:
 
-Steps marked **manual** cannot be scripted — Microsoft requires a signed-in human
+Steps marked **manual** cannot be scripted - Microsoft requires a signed-in human
 for them.
 
 ```bash
 # 1. The reader app registration, and its client secret
 ./scripts/provision-reader-app.ps1 -TenantId <tenant-guid>
 
-# 2. MANUAL, in the portal — each one you skip becomes a not_connected source:
-#    - Power Platform Administrator directory role  -> AgentLens-Reader
-#    - Reader + Cost Management Reader on the subscription
-#    - New-PowerAppManagementApp -ApplicationId <reader-app-id>   (user context)
-#    - Application User in each Dataverse environment
+# 2. MANUAL, in the portal - each one you skip becomes a not_connected source:
+# - Power Platform Administrator directory role  -> AgentLens-Reader
+# - Reader + Cost Management Reader on the subscription
+# - New-PowerAppManagementApp -ApplicationId <reader-app-id>   (user context)
+# - Application User in each Dataverse environment
 
 # 3. Deploy the MCP server
 az containerapp up --name agentlens-mcp --resource-group <rg> \
@@ -257,7 +257,7 @@ AGENTLENS_MCP_URL=https://<app>.azurecontainerapps.io/mcp \
 
 # 7. Secure the endpoint before anyone else finds the URL
 ./scripts/provision-agent-mcp-app.ps1 -TenantId <t> -McpUrl https://<app>/mcp
-#    then create the Entra SSO auth config             (MANUAL — toolkit/portal)
+#    then create the Entra SSO auth config             (MANUAL - toolkit/portal)
 #    then set MCP_TENANT_ID + MCP_AUDIENCE and repackage with
 #    MCP_AUTH_REFERENCE_ID
 ```
@@ -305,12 +305,12 @@ curl https://<your-app>.azurecontainerapps.io/health
 ```
 
 Set `--min-replicas 0` (the default for `up`) and the app **scales to zero**,
-costing nothing between questions — which suits a governance agent asked a few
+costing nothing between questions - which suits a governance agent asked a few
 things a week. The first call after idle pays a few seconds of cold start.
 
 The *app* is free at idle; the deployment is not. The container registry bills a
 few dollars a month whether or not you pull from it, and Log Analytics is free
-only up to its ingestion allowance — which a quiet server stays well under. See
+only up to its ingestion allowance - which a quiet server stays well under. See
 [the cost note](docs/INSTALL.md#cost-honestly).
 
 <details>
@@ -338,7 +338,7 @@ AGENTLENS_MCP_URL = https://ca-agentlens-xxxx.azurecontainerapps.io/mcp
 AGENTLENS_HEALTH_URL = https://ca-agentlens-xxxx.azurecontainerapps.io/health
 ```
 
-Both paths produce the same running server. Use whichever fits — the one-command
+Both paths produce the same running server. Use whichever fits - the one-command
 route for a single tenant, bicep when it has to be repeatable.
 </details>
 
@@ -389,16 +389,16 @@ One app registration does all the reading:
 ```
 
 It creates **AgentLens-Reader**, adds `User.Read.All`, admin-consents it, and
-prints the manual steps that cannot be scripted. Those steps matter — each one
+prints the manual steps that cannot be scripted. Those steps matter - each one
 you skip turns into a `not_connected` source with the fix attached, rather than a
 wrong number.
 
 | Grant | Enables | Without it |
 |---|---|---|
-| **Power Platform Administrator** directory role | Copilot Studio + Agent Builder sweep, environment list | ARG returns zero rows with no error — indistinguishable from an empty tenant, which is why the tool checks the role explicitly |
+| **Power Platform Administrator** directory role | Copilot Studio + Agent Builder sweep, environment list | ARG returns zero rows with no error - indistinguishable from an empty tenant, which is why the tool checks the role explicitly |
 | **Reader** on the subscription | Azure Resource Graph queries | The Power Platform store reports not connected |
 | **Graph `User.Read.All`** (admin-consented) | Owner names instead of object IDs | Every agent looks like an orphan |
-| **Cost Management Reader** on the subscription | Billed spend and forecast in `value_and_cost` | Usage is returned, billed spend is marked not connected — never blended |
+| **Cost Management Reader** on the subscription | Billed spend and forecast in `value_and_cost` | Usage is returned, billed spend is marked not connected - never blended |
 | **A pay-as-you-go billing policy** in `PPAC_BILLING_POLICY_ID` | Per-agent messages, per-agent cost, and the consolidation saving | No per-agent cost anywhere, and the consolidation brief omits its savings line entirely |
 | **`New-PowerAppManagementApp`** for the reader app | DLP policy read | `dlp_posture` returns not connected with the exact cmdlet. A 403 is never reported as "no policies exist" |
 | **Application User** in each Dataverse environment | Aggregate session/deflection/escalation KPIs | Those environments are listed as unreadable, not as zero usage |
@@ -437,7 +437,7 @@ AGENT_APP_ID="<guid>" AGENTLENS_MCP_URL="https://..." npm run package:agent
 - **Read-only.** No tool writes to the tenant. Do not add one that does.
 - **Aggregate only.** Usage is counts and rates from a pre-aggregated analytics
   table. No message content is ever read, logged or returned. No end user is ever
-  identified. The only personal data emitted is an agent *owner's* name — an
+  identified. The only personal data emitted is an agent *owner's* name - an
   accountable party, not a data subject.
 - **No secrets in source.** Everything tenant-specific comes from the
   environment, optionally via Key Vault (`KEY_VAULT_URI`).
@@ -498,7 +498,7 @@ the tenant is being cleaned completely.
 
 ## Configuration
 
-Every variable is optional in the sense that the server always starts — what is
+Every variable is optional in the sense that the server always starts - what is
 missing shows up as a not-connected source with a fix. See
 [`.env.example`](.env.example).
 
@@ -533,7 +533,7 @@ docs/               install, maintaining, troubleshooting, architecture, deploym
 ```
 
 Development: `npm run dev` (watch), `npm run type-check`, `npm run build`,
-`npm run inspect`. Contribution rules — especially what not to add — are in
+`npm run inspect`. Contribution rules - especially what not to add - are in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
@@ -544,7 +544,7 @@ Development: `npm run dev` (watch), `npm run type-check`, `npm run build`,
 |---|---|
 | Every tool says "service principal is not configured" | `AZURE_*` unset on the server, or the Container App revision predates them |
 | Sweep returns 0 Copilot Studio agents with no error | The reader lacks the **Power Platform Administrator** directory role. Grant it, then re-ask |
-| Every agent shows as an orphan | `User.Read.All` not admin-consented — owner IDs cannot be resolved to names |
+| Every agent shows as an orphan | `User.Read.All` not admin-consented - owner IDs cannot be resolved to names |
 | `dlp_posture` says 403 | `New-PowerAppManagementApp` has not been run for the reader app |
 | M365 store says "requires a Microsoft Agent 365 licence" | Expected without Agent 365. The other stores still report |
 | Copilot cannot reach the server | The URL must be public **https** and end in `/mcp`. Check `/health` first |

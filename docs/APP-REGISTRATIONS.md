@@ -31,7 +31,7 @@ Acquires tokens by client credentials for each audience the MCP server reads:
 | Permission | Type | Consent | Why |
 |---|---|---|---|
 | `User.Read.All` | Application | Admin | Turn an agent's owner object ID into a name. Without it every agent looks like an orphan |
-| `CopilotPackages.Read.All` | Application | Admin | The M365 agent registry. **Licence gated** (Agent 365), so it is not requested by the script — add it manually once licensed |
+| `CopilotPackages.Read.All` | Application | Admin | The M365 agent registry. **Licence gated** (Agent 365), so it is not requested by the script - add it manually once licensed |
 
 ### Access that is not an API permission
 
@@ -46,7 +46,7 @@ which is the most common reason a deployment half-works:
 | Application User | Per Dataverse **environment**, with a security role | Aggregate usage KPIs |
 
 A service principal cannot register itself as a management app, and a
-tenant-level grant does nothing for Dataverse — access is per environment.
+tenant-level grant does nothing for Dataverse - access is per environment.
 
 ### Deliberately not requested
 
@@ -120,11 +120,11 @@ anywhere in the output.
 because ownership is the accountability signal for an agent. No end users.
 
 **What happens if the server is compromised?** The attacker gains whatever
-AgentLens-Reader can read — read-only, in one tenant, with every call logged by
+AgentLens-Reader can read - read-only, in one tenant, with every call logged by
 Entra. The server holds no permissions of its own, and rotating one client secret
 revokes the access.
 
 **Why is the endpoint public?** Copilot requires a publicly reachable https
 endpoint. It is protected by Entra SSO token validation, not by network position.
-Until `MCP_AUDIENCE` is set, that validation is off — check `/health` reports
+Until `MCP_AUDIENCE` is set, that validation is off - check `/health` reports
 `authEnabled: true` before treating the deployment as production.
