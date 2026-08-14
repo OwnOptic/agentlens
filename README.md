@@ -41,6 +41,7 @@ unreadable-is-not-zero guarantees called out:
 - [Deploy it](#deploy-it) - [the whole install, in order](#the-whole-install-in-order)
   · step-by-step reference: [docs/INSTALL.md](docs/INSTALL.md)
 - [Package and sideload the agent](#package-and-sideload-the-agent)
+- [Copilot Cowork plugin](#copilot-cowork-plugin)
 - [Access: what to grant, and what breaks without it](#access-what-to-grant-and-what-breaks-without-it)
 - [Securing the server](#securing-the-server)
 - [Cost analysis](#cost-analysis)
@@ -395,6 +396,25 @@ or *conversation starters* does require a repackage.
 
 ---
 
+## Copilot Cowork plugin
+
+The same five tools, inside Microsoft 365 Copilot Cowork - one extra package,
+zero extra server. The plugin's connector points at the same MCP endpoint and
+the same Entra SSO auth config as the agent, bundles a tool description
+captured from a live `tools/list` (Cowork rejects packages without one), and
+ships an `agent-governance-review` skill that encodes the zero-vs-unknown
+rule as a workflow. All five tools declare `readOnlyHint`, so Cowork runs
+them without confirmation prompts.
+
+```bash
+COWORK_APP_ID=<stable-guid> AGENTLENS_MCP_URL=https://<fqdn>/mcp MCP_AUTH_REFERENCE_ID="<auth config ID>" npm run package:cowork
+```
+
+Build, upload paths and the rules that keep it honest:
+[docs/COWORK.md](docs/COWORK.md).
+
+---
+
 ## Access: what to grant, and what breaks without it
 
 One app registration does all the reading:
@@ -542,6 +562,7 @@ src/
   domain/           estate, duplicate clustering, verdicts, types
   tools/            the five tools
 agent/              the Copilot declarative agent package
+cowork/             the Copilot Cowork plugin package (same server, same auth)
 infra/              bicep: registry, Container Apps env, scale-to-zero app
 scripts/            package the agent, provision the app registrations
 docs/               install, maintaining, troubleshooting, architecture, deployment
@@ -581,6 +602,7 @@ Everything in `docs/`, by the question it answers:
 | How do I run it after day one - update, rotate secrets, extend it? | [docs/MAINTAINING.md](docs/MAINTAINING.md) |
 | How is it built, and what guarantees does it make? | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | How do I deploy it repeatably across tenants? | [docs/DEPLOY.md](docs/DEPLOY.md) |
+| How do I put the same tools inside Copilot Cowork? | [docs/COWORK.md](docs/COWORK.md) |
 | What exactly can each identity do, and why two of them? | [docs/APP-REGISTRATIONS.md](docs/APP-REGISTRATIONS.md) |
 | What are the rules for changing the code? | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | How does an AI assistant drive this repo? | [CLAUDE.md](CLAUDE.md) |
