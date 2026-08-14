@@ -2,7 +2,7 @@
 
 ## The shape of it
 
-![AgentLens request flow: Microsoft 365 Copilot calls the declarative agent, which calls the MCP server; the server validates the inbound caller via AgentLens-MCP, then reads six Microsoft APIs read-only via the separate AgentLens-Reader identity.](diagrams/architecture.svg)
+![AgentLens request flow: Microsoft 365 Copilot calls the declarative agent, which calls the MCP server; the server validates the inbound caller via AgentLens-MCP, then reads six Microsoft APIs read-only via the separate AgentLens-Reader identity.](../assets/diagrams/architecture.svg)
 
 Text version, for a diff-friendly reference:
 
@@ -118,7 +118,7 @@ it read and what it could not. The agent's instructions require it to relay a
 
 ### Why there are two cost numbers
 
-![Two cost figures in value_and_cost, never summed: metered messages priced by src/domain/rates.ts on the left produce a derived per-agent cost, and Azure Cost Management queried directly on the right produces the real invoiced total at scope level. A gap between them is usually prepaid capacity absorbing consumption an invoice never shows.](diagrams/cost-model.svg)
+![Two cost figures in value_and_cost, never summed: metered messages priced by src/domain/rates.ts on the left produce a derived per-agent cost, and Azure Cost Management queried directly on the right produces the real invoiced total at scope level. A gap between them is usually prepaid capacity absorbing consumption an invoice never shows.](../assets/diagrams/cost-model.svg)
 
 Metered consumption priced at a rate is a **derived** figure. The Cost
 Management total is a **billed** figure. They are reported separately and never

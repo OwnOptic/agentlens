@@ -223,7 +223,7 @@ Write-Step 'Preflight'
 
 foreach ($tool in @('az', 'node', 'npm')) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
-        throw "$tool not found on PATH. See docs/DEPLOY.md for prerequisites."
+        throw "$tool not found on PATH. See docs/operate/DEPLOY.md for prerequisites."
     }
 }
 Write-Ok 'az, node and npm are available'

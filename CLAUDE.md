@@ -13,7 +13,7 @@ This is the common case: someone clones the repo and says *"install this and
 guide me."* You drive. They do only the handful of things Microsoft requires a
 signed-in human for.
 
-**Full reference for every step: [docs/INSTALL.md](docs/INSTALL.md).** It
+**Full reference for every step: [docs/install/INSTALL.md](docs/install/INSTALL.md).** It
 documents what each step does, what it needs, how to verify it worked, and what
 breaks without it. Read it before starting.
 
@@ -26,7 +26,7 @@ breaks without it. Read it before starting.
    prints every command it would run and every gate it would stop at. Show the
    user what is about to happen to their tenant before it happens.
 3. **Run it for real**, or run the equivalent `az` commands yourself if
-   PowerShell is unavailable - `docs/INSTALL.md` lists the exact command for
+   PowerShell is unavailable - `docs/install/INSTALL.md` lists the exact command for
    every step, so you are never improvising against someone's tenant.
 4. **At each gate, stop.** Give the user the exact click-path or command, wait,
    then verify the gate actually cleared before continuing. Do not carry on

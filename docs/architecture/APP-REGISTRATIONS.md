@@ -101,7 +101,7 @@ tab-SSO client-ID list, and that pattern does not apply here.
 `az ad app update` cannot set the nested `api{}` object; the script PATCHes
 Microsoft Graph directly instead.
 
-Full four-step walkthrough: [agent/README.md](../agent/README.md#authentication).
+Full four-step walkthrough: [agent/README.md](../../agent/README.md#authentication).
 
 ---
 

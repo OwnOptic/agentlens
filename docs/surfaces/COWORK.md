@@ -41,7 +41,7 @@ MCP_AUTH_REFERENCE_ID="<auth config ID>" \
 Output: `cowork/build/agentlens-cowork.zip`. The same three rules as the agent
 package apply: the URL must end in `/mcp` and be read back from Azure, the
 auth config ID comes from the Teams developer portal registration (step 10 of
-[INSTALL.md](INSTALL.md)), and `COWORK_APP_ID` must stay stable forever - a
+[INSTALL.md](../install/INSTALL.md)), and `COWORK_APP_ID` must stay stable forever - a
 new GUID creates a second app instead of updating the first
 (`scripts/install.ps1` state and `.agentlens-install.json` cache it).
 
