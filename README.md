@@ -14,6 +14,11 @@ with real numbers, or tells you exactly which source it could not reach and why.
 
 > **Sweep every agent store in my tenant and flag sprawl and orphans.**
 
+**See it running** - demoed at the Microsoft 365 & Power Platform Community Call,
+23 July 2026:
+[watch the segment](https://youtu.be/2sg9CJirM9I?t=1045) ·
+[talk page, slides and resources](https://www.e-margot.ch/community/talks/agent-governance-meta-agent)
+
 ```
 you  ->  AgentLens declarative agent   (agent/)     what you talk to in Copilot
      ->  AgentLens MCP server          (src/)       five read-only tools
